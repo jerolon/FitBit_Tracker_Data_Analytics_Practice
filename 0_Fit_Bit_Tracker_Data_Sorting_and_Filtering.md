@@ -3,11 +3,12 @@
 Jeronimo Miranda
 2023-05-05
 
-## Loading the data
+## Loading and exploring the data
 
 We are using the data from
 <https://www.kaggle.com/datasets/arashnic/fitbit>. Assume the path to
-the data is in a folder above where the repository is.
+the data is in a folder above where the repository is. \### Daily
+activity data
 
 ``` r
 data_path <- "../Fitabase Data 4.12.16-5.12.16/"
@@ -65,14 +66,54 @@ Data summary
 | SedentaryMinutes         |         0 |             1 |  991.21 |  301.27 |   0 |  729.75 | 1057.50 |  1229.50 |  1440.00 |
 | Calories                 |         0 |             1 | 2303.61 |  718.17 |   0 | 1828.50 | 2134.00 |  2793.25 |  4900.00 |
 
-Already loaded the dates in the correct format. Since apart from date
-and Id all columns are numeric, it makes sense to use
-skim_without_charts which gives a statistical summary of each variable.
-The function output is rendered as an html table, which is quite nice.
+Loaded the dates in the correct format. Since apart from date and Id all
+columns are numeric, it makes sense to use skim_without_charts which
+gives a statistical summary of each variable. The function output is
+rendered as an html table, which is quite nice. What we can see from
+this summary: \* Data was collected for 31 days. \* 33 unique Ids, all
+have 10 characters. \* The minimum for **all** numeric variables is 0.
+This suggests empty days, maybe just days that people did not wear their
+devices. These rows should be eliminated. \* Column names do not need to
+be cleaned \* The data is in long format \* This data can help answer
+our question by telling us how frequently people track different
+activities. Before any analysis we can see that most activity is done
+via trackerDistance rather than LoggedActivities
 
-## Including Plots
+Total distance is not the sum of TrackerDistance and
+LoggedActivitiesDistance, as one could assume. Rather it seems to be the
+sum of the ActiveDistances columns. Lack of metadata is killing me here.
 
-You can also embed plots, for example:
+``` r
+filter(dailyActivity, TotalDistance != (LoggedActivitiesDistance + TrackerDistance))
+```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to
-prevent printing of the R code that generated the plot.
+    ## # A tibble: 32 x 15
+    ##    Id         Activity~1 Total~2 Total~3 Track~4 Logge~5 VeryA~6 Moder~7 Light~8
+    ##    <chr>      <date>       <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>
+    ##  1 6775888955 2016-04-26    7091    5.27    5.27    1.96    3.48   0.870   0.730
+    ##  2 6962181067 2016-04-21   11835    9.71    7.88    4.08    3.99   2.10    3.51 
+    ##  3 6962181067 2016-04-25   13239    9.27    9.08    2.79    3.02   1.68    4.46 
+    ##  4 6962181067 2016-05-09   12342    8.72    8.68    3.17    3.90   1.18    3.65 
+    ##  5 7007744171 2016-04-12   14172   10.3     9.48    4.87    4.5    0.380   5.41 
+    ##  6 7007744171 2016-04-13   12862    9.65    8.60    4.85    4.61   0.560   4.48 
+    ##  7 7007744171 2016-04-14   11179    8.24    7.48    3.29    2.95   0.340   4.96 
+    ##  8 7007744171 2016-04-18   14816   11.0     9.91    4.93    3.79   2.12    5.05 
+    ##  9 7007744171 2016-04-19   14194   10.5     9.5     4.94    4.41   0.760   5.31 
+    ## 10 7007744171 2016-04-20   15566   11.3    10.4     4.92    4.79   0.670   5.86 
+    ## # ... with 22 more rows, 6 more variables: SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>, and
+    ## #   abbreviated variable names 1: ActivityDate, 2: TotalSteps,
+    ## #   3: TotalDistance, 4: TrackerDistance, 5: LoggedActivitiesDistance,
+    ## #   6: VeryActiveDistance, 7: ModeratelyActiveDistance, 8: LightActiveDistance
+
+### Number of days tracked
+
+We group the days by Id and then plot a histogram of how many days
+people in the dataset were tracked
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/number%20of%20days%20tracked-1.png)<!-- -->
+Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows
+that there are no duplicate dates for any Id
