@@ -8,6 +8,7 @@ output: github_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(readr)
+library(skimr)
 ```
 
 ```{r directory setup, include = FALSE}
@@ -17,7 +18,7 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 ## Loading the data
 We are using the data from <https://www.kaggle.com/datasets/arashnic/fitbit>. 
-Assume the path to the data is in the variable *data_path*
+Assume the path to the data is in a folder above where the repository is.
 
 ```{r data loading}
 data_path <- "../Fitabase Data 4.12.16-5.12.16/"
@@ -30,7 +31,7 @@ View(dailyActivity)
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-summary(cars)
+summary(dailyActivity)
 ```
 
 ## Including Plots
