@@ -25,13 +25,12 @@ data_path <- "../Fitabase Data 4.12.16-5.12.16/"
 dailyActivity <- read_csv(paste0(data_path,"dailyActivity_merged.csv"), 
     col_types = cols(Id = col_character(), 
         ActivityDate = col_date(format = "%m/%d/%Y")))
-View(dailyActivity)
+skim_without_charts(dailyActivity)
 ```
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Already loaded the dates in the correct format. Since apart from date and Id all columns are numeric, it makes sense to use skim_without_charts which gives a statistical summary of each variable. The function output is rendered as an html table, which is quite nice.
 
-```{r cars}
-summary(dailyActivity)
+```{r summary}
 ```
 
 ## Including Plots
