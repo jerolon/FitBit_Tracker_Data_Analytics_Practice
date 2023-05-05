@@ -9,6 +9,14 @@ We are using the data from
 <https://www.kaggle.com/datasets/arashnic/fitbit>. Assume the path to
 the data is in the variable *data_path*
 
+``` r
+data_path <- "../Fitabase Data 4.12.16-5.12.16/"
+dailyActivity <- read_csv(paste0(data_path,"dailyActivity_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityDate = col_date(format = "%m/%d/%Y")))
+View(dailyActivity)
+```
+
 When you click the **Knit** button a document will be generated that
 includes both content as well as the output of any embedded R code
 chunks within the document. You can embed an R code chunk like this:
@@ -28,8 +36,6 @@ summary(cars)
 ## Including Plots
 
 You can also embed plots, for example:
-
-![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/pressure-1.png)<!-- -->
 
 Note that the `echo = FALSE` parameter was added to the code chunk to
 prevent printing of the R code that generated the plot.
