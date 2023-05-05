@@ -69,15 +69,20 @@ Data summary
 Loaded the dates in the correct format. Since apart from date and Id all
 columns are numeric, it makes sense to use skim_without_charts which
 gives a statistical summary of each variable. The function output is
-rendered as an html table, which is quite nice. What we can see from
-this summary: \* Data was collected for 31 days. \* 33 unique Ids, all
-have 10 characters. \* The minimum for **all** numeric variables is 0.
-This suggests empty days, maybe just days that people did not wear their
-devices. These rows should be eliminated. \* Column names do not need to
-be cleaned \* The data is in long format \* This data can help answer
-our question by telling us how frequently people track different
-activities. Before any analysis we can see that most activity is done
-via trackerDistance rather than LoggedActivities
+rendered as an html table, which is quite nice.
+
+What we can see from this summary:
+
+- Data was collected for 31 days.
+- 33 unique Ids, all have 10 characters.
+- The minimum for **all** numeric variables is 0. This suggests empty
+  days, maybe just days that people did not wear their devices. These
+  rows should be eliminated.
+- Column names do not need to be cleaned
+- The data is in long format
+- This data can help answer our question by telling us how frequently
+  people track different activities. Before any analysis we can see that
+  most activity is done via trackerDistance rather than LoggedActivities
 
 Total distance is not the sum of TrackerDistance and
 LoggedActivitiesDistance, as one could assume. Rather it seems to be the
@@ -115,5 +120,6 @@ people in the dataset were tracked
     ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/number%20of%20days%20tracked-1.png)<!-- -->
+
 Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows
 that there are no duplicate dates for any Id
