@@ -7,8 +7,13 @@ Jeronimo Miranda
 
 We are using the data from
 <https://www.kaggle.com/datasets/arashnic/fitbit>. Assume the path to
-the data is in a folder above where the repository is. \### Daily
-activity data
+the data is in a folder above where the repository is.
+
+### Daily activity data
+
+I am loading the Ids as character because summary statistics like mean
+or meadian are irrelevant whereas string comparisons like do all have
+the same amount of characters and how many are unique are important.
 
 ``` r
 data_path <- "../Fitabase Data 4.12.16-5.12.16/"
@@ -73,8 +78,8 @@ rendered as an html table, which is quite nice.
 
 What we can see from this summary:
 
-- Data was collected for 31 days.
 - 33 unique Ids, all have 10 characters.
+- Data was collected for 31 days.
 - The minimum for **all** numeric variables is 0. This suggests empty
   days, maybe just days that people did not wear their devices. These
   rows should be eliminated.
@@ -112,7 +117,7 @@ filter(dailyActivity, TotalDistance != (LoggedActivitiesDistance + TrackerDistan
     ## #   3: TotalDistance, 4: TrackerDistance, 5: LoggedActivitiesDistance,
     ## #   6: VeryActiveDistance, 7: ModeratelyActiveDistance, 8: LightActiveDistance
 
-### Number of days tracked
+#### Number of days tracked
 
 We group the days by Id and then plot a histogram of how many days
 people in the dataset were tracked
@@ -123,3 +128,80 @@ people in the dataset were tracked
 
 Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows
 that there are no duplicate dates for any Id
+
+Data seems very redundant. The files `dailyCalories_merged.csv`,
+`daily_Intensities_merged` and `dailySteps_merged.csv` are just column
+subsets of `dailyActivity_merged.csv`
+
+### Heartrate seconds data
+
+``` r
+heartrate_seconds <- read_csv(paste0(data_path,"heartrate_seconds_merged.csv"), 
+    col_types = cols(Id = col_character(), Time = col_character(), Value = col_double()))
+heartrate_date_time <- transmute(heartrate_seconds, Id, date_time = mdy_hms(Time), Value, hour_of_day = hms::as_hms(date_time), dia = date(date_time))
+skim_without_charts(heartrate_date_time)
+```
+
+    ## Warning in kable_pipe(x = structure(c("Name", "Number of rows", "Number of
+    ## columns", : The table should have a header (column names)
+
+|                                                  |                     |
+|:-------------------------------------------------|:--------------------|
+| Name                                             | heartrate_date_time |
+| Number of rows                                   | 2483658             |
+| Number of columns                                | 5                   |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |                     |
+| Column type frequency:                           |                     |
+| character                                        | 1                   |
+| Date                                             | 1                   |
+| difftime                                         | 1                   |
+| numeric                                          | 1                   |
+| POSIXct                                          | 1                   |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ |                     |
+| Group variables                                  | None                |
+
+Data summary
+
+**Variable type: character**
+
+| skim_variable | n_missing | complete_rate | min | max | empty | n_unique | whitespace |
+|:--------------|----------:|--------------:|----:|----:|------:|---------:|-----------:|
+| Id            |         0 |             1 |  10 |  10 |     0 |       14 |          0 |
+
+**Variable type: Date**
+
+| skim_variable | n_missing | complete_rate | min        | max        | median     | n_unique |
+|:--------------|----------:|--------------:|:-----------|:-----------|:-----------|---------:|
+| dia           |         0 |             1 | 2016-04-12 | 2016-05-12 | 2016-04-26 |       31 |
+
+**Variable type: difftime**
+
+| skim_variable | n_missing | complete_rate | min    | max        | median     | n_unique |
+|:--------------|----------:|--------------:|:-------|:-----------|:-----------|---------:|
+| hour_of_day   |         0 |             1 | 0 secs | 86398 secs | 47690 secs |    86046 |
+
+**Variable type: numeric**
+
+| skim_variable | n_missing | complete_rate |  mean |   sd |  p0 | p25 | p50 | p75 | p100 |
+|:--------------|----------:|--------------:|------:|-----:|----:|----:|----:|----:|-----:|
+| Value         |         0 |             1 | 77.33 | 19.4 |  36 |  63 |  73 |  88 |  203 |
+
+**Variable type: POSIXct**
+
+| skim_variable | n_missing | complete_rate | min        | max                 | median              | n_unique |
+|:--------------|----------:|--------------:|:-----------|:--------------------|:--------------------|---------:|
+| date_time     |         0 |             1 | 2016-04-12 | 2016-05-12 16:20:00 | 2016-04-26 20:28:50 |   961274 |
+
+Only 14 out of 33 volunteers use a tracker that gets heart-rate data
+
+These graphics span 24 hour periods. So you can see that only 3 people
+do not use the device to track sleep. The data is smoothed for every
+user, so day to day variability is lost. Still you can see some patterns
+of when people tend to exercise more consistently. Later we can average
+by the heart rate in sliding windows to plot different days for each
+user. It is just that the raw data every 5 seconds is way too dense to
+be visualized directly, even for a single day for a single user.
+
+    ## `geom_smooth()` using method = 'gam' and formula = 'y ~ s(x, bs = "cs")'
+
+![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/graph%20of%20heart%20rates-1.png)<!-- -->
