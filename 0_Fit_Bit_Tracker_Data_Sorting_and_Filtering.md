@@ -1,4 +1,4 @@
-0_Fit_Bit_Tracker_Data_Sorting_and_Filtering
+Fit Bit Tracker Data Sorting anda Filtering
 ================
 Jeronimo Miranda
 2023-05-05
@@ -22,9 +22,6 @@ dailyActivity <- read_csv(paste0(data_path,"dailyActivity_merged.csv"),
         ActivityDate = col_date(format = "%m/%d/%Y")))
 skim_without_charts(dailyActivity)
 ```
-
-    ## Warning in kable_pipe(x = structure(c("Name", "Number of rows", "Number of
-    ## columns", : The table should have a header (column names)
 
 |                                                  |               |
 |:-------------------------------------------------|:--------------|
@@ -121,9 +118,6 @@ filter(dailyActivity, TotalDistance != (LoggedActivitiesDistance + TrackerDistan
 
 We group the days by Id and then plot a histogram of how many days
 people in the dataset were tracked
-
-    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
-
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/number%20of%20days%20tracked-1.png)<!-- -->
 
 Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows
@@ -141,9 +135,6 @@ heartrate_seconds <- read_csv(paste0(data_path,"heartrate_seconds_merged.csv"),
 heartrate_date_time <- transmute(heartrate_seconds, Id, date_time = mdy_hms(Time), Value, hour_of_day = hms::as_hms(date_time), dia = date(date_time))
 skim_without_charts(heartrate_date_time)
 ```
-
-    ## Warning in kable_pipe(x = structure(c("Name", "Number of rows", "Number of
-    ## columns", : The table should have a header (column names)
 
 |                                                  |                     |
 |:-------------------------------------------------|:--------------------|
@@ -205,3 +196,108 @@ be visualized directly, even for a single day for a single user.
     ## `geom_smooth()` using method = 'gam' and formula = 'y ~ s(x, bs = "cs")'
 
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/graph%20of%20heart%20rates-1.png)<!-- -->
+
+### Loading and checking hourly data
+
+Finally figured out how to parse date times from readr. There are three
+files with hourly aggregated data. Skim without chart is done after
+merging all three files.
+
+``` r
+hourlyCalories <- read_csv(paste0(data_path, "hourlyCalories_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyIntensities <- read_csv(paste0(data_path, "hourlyIntensities_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlySteps <- read_csv(paste0(data_path, "hourlySteps_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+hourlyActivity <- inner_join(hourlyCalories, hourlyIntensities, by = c("Id","ActivityHour")) %>% inner_join(hourlySteps, by = c("Id", "ActivityHour"))
+
+skim_without_charts(hourlyActivity)
+```
+
+|                                                  |                |
+|:-------------------------------------------------|:---------------|
+| Name                                             | hourlyActivity |
+| Number of rows                                   | 22099          |
+| Number of columns                                | 6              |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |                |
+| Column type frequency:                           |                |
+| character                                        | 1              |
+| numeric                                          | 4              |
+| POSIXct                                          | 1              |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ |                |
+| Group variables                                  | None           |
+
+Data summary
+
+**Variable type: character**
+
+| skim_variable | n_missing | complete_rate | min | max | empty | n_unique | whitespace |
+|:--------------|----------:|--------------:|----:|----:|------:|---------:|-----------:|
+| Id            |         0 |             1 |  10 |  10 |     0 |       33 |          0 |
+
+**Variable type: numeric**
+
+| skim_variable    | n_missing | complete_rate |   mean |     sd |  p0 | p25 |   p50 |    p75 |  p100 |
+|:-----------------|----------:|--------------:|-------:|-------:|----:|----:|------:|-------:|------:|
+| Calories         |         0 |             1 |  97.39 |  60.70 |  42 |  63 | 83.00 | 108.00 |   948 |
+| TotalIntensity   |         0 |             1 |  12.04 |  21.13 |   0 |   0 |  3.00 |  16.00 |   180 |
+| AverageIntensity |         0 |             1 |   0.20 |   0.35 |   0 |   0 |  0.05 |   0.27 |     3 |
+| StepTotal        |         0 |             1 | 320.17 | 690.38 |   0 |   0 | 40.00 | 357.00 | 10554 |
+
+**Variable type: POSIXct**
+
+| skim_variable | n_missing | complete_rate | min        | max                 | median              | n_unique |
+|:--------------|----------:|--------------:|:-----------|:--------------------|:--------------------|---------:|
+| ActivityHour  |         0 |             1 | 2016-04-12 | 2016-05-12 15:00:00 | 2016-04-26 06:00:00 |      736 |
+
+- All three datasets are complete, the joins by Id and hourlyActivity
+  conserve the 22099 hours.
+- What is Intensity? How is it defined and why does it not appear in
+  dailyActivity? Maybe it is some function of hear-rate and steps.
+
+There is data for 24 hours most days. Does this mean that people almost
+never take off their devices? Or just that there is hourly data
+regardless of whether people wear their fitbits?
+
+``` r
+hourlyActivity %>% mutate(fecha = date(ActivityHour)) %>% group_by(fecha, Id) %>% summarise(hoursTracked = n()) %>% ungroup() %>% group_by(hoursTracked) %>% summarise(days = n()) %>% arrange(desc(hoursTracked))
+```
+
+    ## # A tibble: 14 x 2
+    ##    hoursTracked  days
+    ##           <int> <int>
+    ##  1           24   903
+    ##  2           23     1
+    ##  3           22     1
+    ##  4           21     1
+    ##  5           17     1
+    ##  6           16     8
+    ##  7           15     6
+    ##  8           13     1
+    ##  9           12     5
+    ## 10           11     2
+    ## 11           10     2
+    ## 12            6     1
+    ## 13            4     1
+    ## 14            1     1
+
+Take the intervals between rows. All NAs are when users Id change. All
+other gaps are one hour long. Hard to think that users wore their
+fitbits for two months continuously. Heart rate data can be used in the
+analysis section to answer this question.
+
+``` r
+hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour)) %>% group_by(Id) %>% mutate(gap = ActivityHour - lag(ActivityHour)) %>% ungroup() %>%  group_by(gap) %>% summarise(gaps = n())
+```
+
+    ## # A tibble: 2 x 2
+    ##   gap       gaps
+    ##   <drtn>   <int>
+    ## 1  1 hours 22066
+    ## 2 NA hours    33

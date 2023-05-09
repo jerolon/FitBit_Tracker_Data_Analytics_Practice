@@ -1,5 +1,5 @@
 ---
-title: "0_Fit_Bit_Tracker_Data_Sorting_and_Filtering"
+title: "Fit Bit Tracker Data Sorting anda Filtering"
 author: "Jeronimo Miranda"
 date: '2023-05-05'
 output: github_document
@@ -26,7 +26,7 @@ Assume the path to the data is in a folder above where the repository is.
 
 I am loading the Ids as character because summary statistics like mean or meadian are irrelevant whereas string comparisons like do all have the same amount of characters and how many are unique are important.
 
-```{r data loading}
+```{r data loading, message=FALSE, warning=FALSE}
 data_path <- "../Fitabase Data 4.12.16-5.12.16/"
 dailyActivity <- read_csv(paste0(data_path,"dailyActivity_merged.csv"), 
     col_types = cols(Id = col_character(), 
@@ -52,9 +52,10 @@ filter(dailyActivity, TotalDistance != (LoggedActivitiesDistance + TrackerDistan
 #### Number of days tracked
 
 We group the days by Id and then plot a histogram of how many days people in the dataset were tracked
-```{r number of days tracked, echo=FALSE}
+```{r number of days tracked, echo=FALSE, message=FALSE, warning=FALSE}
 library(ggplot2)
-select(dailyActivity, Id, ActivityDate) %>% group_by(Id) %>% summarise(N_days = n()) %>% ggplot() + geom_histogram(aes(x = N_days)) + theme_bw()
+select(dailyActivity, Id, ActivityDate) %>% group_by(Id) %>% summarise(N_days = n()) %>% ggplot() + geom_histogram(aes(x = N_days)) + theme_bw() + 
+  labs(title = "Days of activity", subtitle = "Frequency of the number of days tracked per user")
 ```
 
 Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows that there are no duplicate dates for any Id
@@ -63,7 +64,7 @@ Data seems very redundant. The files `dailyCalories_merged.csv`, `daily_Intensit
 
 ### Heartrate seconds data
 
-```{r load heart rate}
+```{r load heart rate, warning=FALSE}
 heartrate_seconds <- read_csv(paste0(data_path,"heartrate_seconds_merged.csv"), 
     col_types = cols(Id = col_character(), Time = col_character(), Value = col_double()))
 heartrate_date_time <- transmute(heartrate_seconds, Id, date_time = mdy_hms(Time), Value, hour_of_day = hms::as_hms(date_time), dia = date(date_time))
@@ -74,6 +75,42 @@ Only 14 out of 33 volunteers use a tracker that gets heart-rate data
 
 These graphics span 24 hour periods. So you can see that only 3 people do not use the device to track sleep. The data is smoothed for every user, so day to day variability is lost. Still you can see some patterns of when people tend to exercise more consistently. Later we can average by the heart rate in sliding windows to plot different days for each user. It is just that the raw data every 5 seconds is way too dense to be visualized directly, even for a single day for a single user.
 
-```{r graph of heart rates, echo =FALSE}
-heartrate_date_time %>% ggplot() + geom_smooth(aes(x = hour_of_day, y = Value), se=FALSE) + facet_wrap(~Id)
+```{r graph of heart rates, echo=FALSE}
+heartrate_date_time %>% ggplot() + geom_smooth(aes(x = hour_of_day, y = Value), se=FALSE) + facet_wrap(~Id) + labs(title = "Heart rate throught the day", subtitle = "Trendline of heart rate per user")
 ```
+
+### Loading and checking hourly data
+Finally figured out how to parse date times from readr. There are three files with hourly aggregated data. Skim without chart is done after merging all three files.
+```{r hourly loading, warning=FALSE}
+hourlyCalories <- read_csv(paste0(data_path, "hourlyCalories_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyIntensities <- read_csv(paste0(data_path, "hourlyIntensities_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlySteps <- read_csv(paste0(data_path, "hourlySteps_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+hourlyActivity <- inner_join(hourlyCalories, hourlyIntensities, by = c("Id","ActivityHour")) %>% inner_join(hourlySteps, by = c("Id", "ActivityHour"))
+
+skim_without_charts(hourlyActivity)
+```
+
+- All three datasets are complete, the joins by Id and hourlyActivity conserve the 22099 hours.
+- What is Intensity? How is it defined and why does it not appear in dailyActivity? Maybe it is some function of hear-rate and steps.
+
+There is data for 24 hours most days. Does this mean that people almost never take off their devices? Or just that there is hourly data regardless of whether people wear their fitbits?
+
+```{r hoursTracked, echo=TRUE, message=FALSE, warning=FALSE}
+hourlyActivity %>% mutate(fecha = date(ActivityHour)) %>% group_by(fecha, Id) %>% summarise(hoursTracked = n()) %>% ungroup() %>% group_by(hoursTracked) %>% summarise(days = n()) %>% arrange(desc(hoursTracked))
+```
+
+Take the intervals between rows. All NAs are when users Id change. All other gaps are one hour long. Hard to think that users wore their fitbits for two months continuously. Heart rate data can be used in the analysis section to answer this question.
+
+```{r duration of tracking per user}
+hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour)) %>% group_by(Id) %>% mutate(gap = ActivityHour - lag(ActivityHour)) %>% ungroup() %>%  group_by(gap) %>% summarise(gaps = n())
+```
+
+
