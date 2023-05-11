@@ -1,5 +1,5 @@
 ---
-title: "Fit Bit Tracker Data Sorting anda Filtering"
+title: "Fit Bit Tracker Data Sorting and Filtering"
 author: "Jeronimo Miranda"
 date: '2023-05-05'
 output: github_document
@@ -11,6 +11,8 @@ library(readr)
 library(skimr)
 library(dplyr)
 library(lubridate)
+library(stringr)
+library(tidyr)
 ```
 
 ```{r directory setup, include = FALSE}
@@ -112,5 +114,64 @@ Take the intervals between rows. All NAs are when users Id change. All other gap
 ```{r duration of tracking per user}
 hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour)) %>% group_by(Id) %>% mutate(gap = ActivityHour - lag(ActivityHour)) %>% ungroup() %>%  group_by(gap) %>% summarise(gaps = n())
 ```
+### Loading minute data
 
+Minute data has the peculiarity that each feature is present in **Wide** and **Narrow** modalities. My first guess was *Wide* meant that each user had its oen column, but it is actually that files have a row per hour and each column is a minute. This is awful, but a good opportunity to try the package called "lubridate".
+
+The features present with minute resolution are:
+
+- Calories
+- Intensities
+- Steps
+- METs (Only present in narrow format God knows why)
+- Sleep (Not specified whether it is narrow or wide format)
+
+#### Calories by the minute
+
+```{r minute calories, echo=TRUE, message=FALSE, warning=FALSE}
+minuteCaloriesNarrow <- read_csv(paste0(data_path, "minuteCaloriesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteCaloriesWide <- read_csv(paste0(data_path,"minuteCaloriesWide_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+#This Transforms the wide data to narrow
+minuteCalWide_toNarrow <- minuteCaloriesWide %>% pivot_longer(names_to = "Minute", values_to = "Calories", cols = starts_with("Calories"), names_transform = readr::parse_number)
+
+#Note the "minutes" function when adding to ActivityHour, otherwise the numeric column would get added as seconds
+minuteCalWide_toNarrow <- minuteCalWide_toNarrow %>% transmute(Id, ActivityMinute = ActivityHour + minutes(Minute), Calories) %>% arrange(Id)
+
+```
+
+#### Discrepancies between the files
+
+Already the number of rows differs between both files
+```{r calorie comparison, echo=TRUE, message=FALSE, warning=FALSE}
+nrow(minuteCaloriesNarrow) - (60 * nrow(minuteCaloriesWide))
+```
+The minuteCaloriesNarrow file and the minuteCaloriesNarrow differ in data, for some random reason.
+
+We will just make a new minuteCalories object as the intersection of both files, the Wide file previously transformed to long format in a chunk above. Delete the intermediate files to save memory
+
+```{r minute calories merged, message=FALSE, warning=FALSE}
+minuteCalories <- union(minuteCaloriesNarrow, minuteCalWide_toNarrow)
+rm(minuteCaloriesNarrow)
+rm(minuteCalWide_toNarrow)
+```
+
+Now we will compare these data with the previously loaded hourly data. In the code below, note the combination of the functions `hours` which transforms a number to hours and `hour` which extracts the hour info from a date time.
+
+```{r comparison of minute and hour data, message=FALSE, warning=FALSE}
+minuteCalories 
+
+#Group the minuteCalories by hour and sum the cals. A column in the summerise function lets us check that we are not including hours where not all minutes are present
+minuteCalories2hour <- minuteCalories %>% transmute(Id, ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
+
+minuteCalories2hour <- minuteCalories2hour %>% filter(n_minutes == 60) %>% select(-n_minutes)
+setdiff(minuteCalories2hour, hourlyCalories)
+```
+
+Comparing the two files, it seems what happened is that in the hourly data, all days without the full 24 hours were dropped. This is understandable, since later this data was used for daily data, so keeping less than 24 hour days would have resulted in bias for some days. On the other hand, for the picture of device use, complete hourly data can be useful.
 

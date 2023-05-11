@@ -1,4 +1,4 @@
-Fit Bit Tracker Data Sorting anda Filtering
+Fit Bit Tracker Data Sorting and Filtering
 ================
 Jeronimo Miranda
 2023-05-05
@@ -301,3 +301,120 @@ hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour
     ##   <drtn>   <int>
     ## 1  1 hours 22066
     ## 2 NA hours    33
+
+### Loading minute data
+
+Minute data has the peculiarity that each feature is present in **Wide**
+and **Narrow** modalities. My first guess was *Wide* meant that each
+user had its oen column, but it is actually that files have a row per
+hour and each column is a minute. This is awful, but a good opportunity
+to try the package called “lubridate”.
+
+The features present with minute resolution are:
+
+- Calories
+- Intensities
+- Steps
+- METs (Only present in narrow format God knows why)
+- Sleep (Not specified whether it is narrow or wide format)
+
+#### Calories by the minute
+
+``` r
+minuteCaloriesNarrow <- read_csv(paste0(data_path, "minuteCaloriesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteCaloriesWide <- read_csv(paste0(data_path,"minuteCaloriesWide_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+#This Transforms the wide data to narrow
+minuteCalWide_toNarrow <- minuteCaloriesWide %>% pivot_longer(names_to = "Minute", values_to = "Calories", cols = starts_with("Calories"), names_transform = readr::parse_number)
+
+#Note the "minutes" function when adding to ActivityHour, otherwise the numeric column would get added as seconds
+minuteCalWide_toNarrow <- minuteCalWide_toNarrow %>% transmute(Id, ActivityMinute = ActivityHour + minutes(Minute), Calories) %>% arrange(Id)
+```
+
+#### Discrepancies between the files
+
+Already the number of rows differs between both files
+
+``` r
+nrow(minuteCaloriesNarrow) - (60 * nrow(minuteCaloriesWide))
+```
+
+    ## [1] 26880
+
+The minuteCaloriesNarrow file and the minuteCaloriesNarrow differ in
+data, for some random reason.
+
+We will just make a new minuteCalories object as the intersection of
+both files, the Wide file previously transformed to long format in a
+chunk above. Delete the intermediate files to save memory
+
+``` r
+minuteCalories <- union(minuteCaloriesNarrow, minuteCalWide_toNarrow)
+rm(minuteCaloriesNarrow)
+rm(minuteCalWide_toNarrow)
+```
+
+Now we will compare these data with the previously loaded hourly data.
+In the code below, note the combination of the functions `hours` which
+transforms a number to hours and `hour` which extracts the hour info
+from a date time.
+
+``` r
+minuteCalories 
+```
+
+    ## # A tibble: 1,346,220 x 3
+    ##    Id         ActivityMinute      Calories
+    ##    <chr>      <dttm>                 <dbl>
+    ##  1 1503960366 2016-04-12 00:00:00    0.786
+    ##  2 1503960366 2016-04-12 00:01:00    0.786
+    ##  3 1503960366 2016-04-12 00:02:00    0.786
+    ##  4 1503960366 2016-04-12 00:03:00    0.786
+    ##  5 1503960366 2016-04-12 00:04:00    0.786
+    ##  6 1503960366 2016-04-12 00:05:00    0.944
+    ##  7 1503960366 2016-04-12 00:06:00    0.944
+    ##  8 1503960366 2016-04-12 00:07:00    0.944
+    ##  9 1503960366 2016-04-12 00:08:00    0.944
+    ## 10 1503960366 2016-04-12 00:09:00    0.944
+    ## # ... with 1,346,210 more rows
+
+``` r
+#Group the minuteCalories by hour and sum the cals. A column in the summerise function lets us check that we are not including hours where not all minutes are present
+minuteCalories2hour <- minuteCalories %>% transmute(Id, ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
+```
+
+    ## `summarise()` has grouped output by 'Id'. You can override using the `.groups`
+    ## argument.
+
+``` r
+minuteCalories2hour <- minuteCalories2hour %>% filter(n_minutes == 60) %>% select(-n_minutes)
+setdiff(minuteCalories2hour, hourlyCalories)
+```
+
+    ## # A tibble: 338 x 3
+    ## # Groups:   Id [19]
+    ##    Id         ActivityHour        Calories
+    ##    <chr>      <dttm>                 <dbl>
+    ##  1 1503960366 2016-05-11 21:00:00       91
+    ##  2 1503960366 2016-05-11 22:00:00       47
+    ##  3 1503960366 2016-05-11 23:00:00       47
+    ##  4 1503960366 2016-05-12 00:00:00       47
+    ##  5 1503960366 2016-05-12 01:00:00       47
+    ##  6 1503960366 2016-05-12 02:00:00       47
+    ##  7 1503960366 2016-05-12 03:00:00       47
+    ##  8 1503960366 2016-05-12 04:00:00       47
+    ##  9 1503960366 2016-05-12 05:00:00       47
+    ## 10 1503960366 2016-05-12 06:00:00       47
+    ## # ... with 328 more rows
+
+Comparing the two files, it seems what happened is that in the hourly
+data, all days without the full 24 hours were dropped. This is
+understandable, since later this data was used for daily data, so
+keeping less than 24 hour days would have resulted in bias for some
+days. On the other hand, the complete hourly data could be used for some
+analysis.
