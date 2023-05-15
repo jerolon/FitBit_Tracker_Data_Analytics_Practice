@@ -22,7 +22,7 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 ## Loading and exploring the data
 We are using the data from <https://www.kaggle.com/datasets/arashnic/fitbit>. 
-Assume the path to the data is in a folder above where the repository is.
+Assume the path to the data is in a folder above where the repository is. This is an exploration of the data's quirks.
 
 ### Daily activity data
 
@@ -167,11 +167,78 @@ Now we will compare these data with the previously loaded hourly data. In the co
 minuteCalories 
 
 #Group the minuteCalories by hour and sum the cals. A column in the summerise function lets us check that we are not including hours where not all minutes are present
-minuteCalories2hour <- minuteCalories %>% transmute(Id, ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
+minuteCalories2hour <- minuteCalories %>% transmute(Id, 
+                                                    ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), 
+                                                    Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
 
 minuteCalories2hour <- minuteCalories2hour %>% filter(n_minutes == 60) %>% select(-n_minutes)
 setdiff(minuteCalories2hour, hourlyCalories)
 ```
 
-Comparing the two files, it seems what happened is that in the hourly data, all days without the full 24 hours were dropped. This is understandable, since later this data was used for daily data, so keeping less than 24 hour days would have resulted in bias for some days. On the other hand, for the picture of device use, complete hourly data can be useful.
+Not clear what is going on. A clue might be in the days that do not have the full 24 hours.
 
+#### Intensities and Steps data
+We loaded Intensities and steps data, which are also in Wide/Narrow formats and did the same operations as above for the calories, therefore, we do not show that code here. Nevertheless, we  will merge the three files into a single minute dataframe.
+```{r load intensities and steps, message=FALSE, warning=FALSE, include=FALSE}
+minuteIntensitiesNarrow <- read_csv(paste0(data_path,"minuteIntensitiesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteIntensitiesWide <- read_csv(paste0(data_path,"minuteIntensitiesWide_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+#This Transforms the wide data to narrow
+minuteIntWide_toNarrow <- minuteIntensitiesWide %>% pivot_longer(names_to = "Minute", values_to = "Intensity", cols = starts_with("Intensity"), names_transform = readr::parse_number)
+
+#Transform the hour data to hour plus minutes in order to merge with the narrow data
+minuteIntWide_toNarrow <- minuteIntWide_toNarrow %>% transmute(Id, ActivityMinute = ActivityHour + minutes(Minute), Intensity) %>% arrange(Id)
+
+##Merging
+minuteIntensity <- union(minuteIntensitiesNarrow, minuteIntWide_toNarrow)
+rm(minuteIntensitiesNarrow)
+rm(minuteIntWide_toNarrow)
+
+## Steps
+minuteStepsNarrow <- read_csv(paste0(data_path,"minuteStepsNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteStepsWide <- read_csv(paste0(data_path,"minuteStepsWide_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+
+#This Transforms the wide data to narrow
+minuteStepsWide_toNarrow <- minuteStepsWide %>% pivot_longer(names_to = "Minute", values_to = "Steps", cols = starts_with("Steps"), names_transform = readr::parse_number)
+
+#Transform the hour data to hour plus minutes in order to merge with the narrow data
+minuteStepsWide_toNarrow <- minuteStepsWide_toNarrow %>% transmute(Id, ActivityMinute = ActivityHour + minutes(Minute), Steps) %>% arrange(Id)
+
+##Merging
+minuteSteps <- union(minuteStepsNarrow, minuteStepsWide_toNarrow)
+rm(minuteStepsNarrow)
+rm(minuteStepsWide_toNarrow)
+
+###Triple join
+minuteActivity <- inner_join(minuteCalories, minuteIntensity, by = c("Id","ActivityMinute")) %>% inner_join(minuteSteps, by = c("Id", "ActivityMinute"))
+```
+
+### Loading METs data
+METs, or [Metabolically equivalent minutes](https://en.wikipedia.org/wiki/Metabolic_equivalent_of_task) is, according to wikipedia: "the objective measure of the ratio of the rate at which a person expends energy, relative to the mass of that person". It also says it is a way to grade activity levels.Therefore, we will join it with the minute dataset in order to compare the relationships between them. 
+
+```{r METs loading, message=FALSE, warning=FALSE}
+minuteMETsNarrow <- read_csv(paste0(data_path,"minuteMETsNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+mergeMETsActivity <- inner_join(minuteActivity, minuteMETsNarrow)
+library(gridExtra)
+g1 <- mergeMETsActivity %>% ggplot(aes(x = Intensity, y = METs)) + geom_point() + theme_bw()
+g2 <- mergeMETsActivity %>% ggplot(aes(x = Steps, y = METs)) + geom_point() + theme_bw()
+g3 <- mergeMETsActivity %>% ggplot(aes(x = Calories, y = METs)) + geom_point() + theme_bw()
+g4 <- mergeMETsActivity %>% ggplot(aes(x = Steps, y = Calories)) + geom_point() + theme_bw()
+grid.arrange(g1,g2,g3,g4, nrow = 2)
+```
+
+The relationship between these variables depends on the heart rate and on the body weight, that is why the graphs are so unclear. Nevertheless, the graph between METs and calories suggests that there is linear relationship between them that depends only on each user.

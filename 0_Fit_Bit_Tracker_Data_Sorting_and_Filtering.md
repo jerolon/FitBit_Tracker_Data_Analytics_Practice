@@ -7,7 +7,8 @@ Jeronimo Miranda
 
 We are using the data from
 <https://www.kaggle.com/datasets/arashnic/fitbit>. Assume the path to
-the data is in a folder above where the repository is.
+the data is in a folder above where the repository is. This is an
+exploration of the data’s quirks.
 
 ### Daily activity data
 
@@ -385,13 +386,10 @@ minuteCalories
 
 ``` r
 #Group the minuteCalories by hour and sum the cals. A column in the summerise function lets us check that we are not including hours where not all minutes are present
-minuteCalories2hour <- minuteCalories %>% transmute(Id, ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
-```
+minuteCalories2hour <- minuteCalories %>% transmute(Id, 
+                                                    ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), 
+                                                    Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
 
-    ## `summarise()` has grouped output by 'Id'. You can override using the `.groups`
-    ## argument.
-
-``` r
 minuteCalories2hour <- minuteCalories2hour %>% filter(n_minutes == 60) %>% select(-n_minutes)
 setdiff(minuteCalories2hour, hourlyCalories)
 ```
@@ -412,9 +410,43 @@ setdiff(minuteCalories2hour, hourlyCalories)
     ## 10 1503960366 2016-05-12 06:00:00       47
     ## # ... with 328 more rows
 
-Comparing the two files, it seems what happened is that in the hourly
-data, all days without the full 24 hours were dropped. This is
-understandable, since later this data was used for daily data, so
-keeping less than 24 hour days would have resulted in bias for some
-days. On the other hand, the complete hourly data could be used for some
-analysis.
+Not clear what is going on. A clue might be in the days that do not have
+the full 24 hours.
+
+#### Intensities and Steps data
+
+We loaded Intensities and steps data, which are also in Wide/Narrow
+formats and did the same operations as above for the calories,
+therefore, we do not show that code here. Nevertheless, we will merge
+the three files into a single minute dataframe.
+
+### Loading METs data
+
+METs, or [Metabolically equivalent
+minutes](https://en.wikipedia.org/wiki/Metabolic_equivalent_of_task) is,
+according to wikipedia: “the objective measure of the ratio of the rate
+at which a person expends energy, relative to the mass of that person”.
+It also says it is a way to grade activity levels.Therefore, we will
+join it with the minute dataset in order to compare the relationships
+between them.
+
+``` r
+minuteMETsNarrow <- read_csv(paste0(data_path,"minuteMETsNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+mergeMETsActivity <- inner_join(minuteActivity, minuteMETsNarrow)
+library(gridExtra)
+g1 <- mergeMETsActivity %>% ggplot(aes(x = Intensity, y = METs)) + geom_point() + theme_bw()
+g2 <- mergeMETsActivity %>% ggplot(aes(x = Steps, y = METs)) + geom_point() + theme_bw()
+g3 <- mergeMETsActivity %>% ggplot(aes(x = Calories, y = METs)) + geom_point() + theme_bw()
+g4 <- mergeMETsActivity %>% ggplot(aes(x = Steps, y = Calories)) + geom_point() + theme_bw()
+grid.arrange(g1,g2,g3,g4, nrow = 2)
+```
+
+![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/METs%20loading-1.png)<!-- -->
+
+The relationship between these variables depends on the heart rate and
+on the body weight. The graph between METs and calories, suggests that
+there is linear relationship between them that depends only on each
+user.
