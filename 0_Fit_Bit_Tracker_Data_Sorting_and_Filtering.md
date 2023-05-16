@@ -447,6 +447,142 @@ grid.arrange(g1,g2,g3,g4, nrow = 2)
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/METs%20loading-1.png)<!-- -->
 
 The relationship between these variables depends on the heart rate and
-on the body weight. The graph between METs and calories, suggests that
-there is linear relationship between them that depends only on each
-user.
+on the body weight, that is why the graphs are so unclear. Nevertheless,
+the graph between METs and calories suggests that there is linear
+relationship between them that depends only on each user.
+
+### Loading sleep data
+
+Sleep data by day. Will be interesting to ask if the users who input
+sleep data also logged more days or use their device more for longer
+during waking hours?
+
+To check the credibility of the data, we plot the difference between the
+sleep minutes and wake minutes. We call this tiredness but it could be
+due to insomnia or some other factor like misclassification by the
+device. No value should be negative, unless they are sleeping on their
+feet.
+
+``` r
+sleepDay <- read_csv(paste0(data_path,"sleepDay_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        SleepDay = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+mutate(sleepDay, tiredness = TotalTimeInBed - TotalMinutesAsleep) %>% group_by(Id) %>% summarise(tired = mean(tiredness)) %>% ggplot() + geom_col(aes(x=Id, y= tired)) + theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + labs(ylab = "Minutes", title = "Tiredness", subtitle = "Mean minutes awake in bed by user")
+```
+
+![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/load%20sleep%20data-1.png)<!-- -->
+
+Most users mean difference is half an hour, or less, meaning they do not
+take long to fall sleep and get out of bed easily. Users 1844 and 3977
+spend almost 3 hours in bed without sleeping. This could mean their data
+is not credible or is part of their routine. Checking user 1844 it seems
+that there are only 3 sleep records and all three have the exact same
+number of total minutes in bed: 961. This probably means the data for
+this user is unreliable. User 3977 seems to have a genuine sleep
+problem, since there is no day that they do not spend more than 100
+minutes awake in bed. Using the lubridate package function wday() I saw
+that this happens any day of the week (I thought they could be only
+tracking their sleep on weekends). I will not show data for these users,
+but will filter it out.
+
+``` r
+sleepDay <- sleepDay %>% filter(Id != 3977333714, Id != 1844505072)
+
+sleepDay %>% ggplot(aes(x = Id, y = TotalMinutesAsleep)) + geom_boxplot() + geom_jitter() + theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + labs(ylab = "Minutes", title = "Total Minutes Asleep", subtitle = "Boxplot of total daily minutes asleep by user")
+```
+
+![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/sleep-1.png)<!-- -->
+From the above graph, it is clear that the data for 2026 and 7007 is
+also unreliable due to very few datapoints and less than 100 minutes of
+sleep. We will filter records from users with fewer than 3 days of sleep
+tracking:
+
+``` r
+sleepDay <- sleepDay %>% group_by(Id) %>% filter(n()>3)
+```
+
+### Load weight info
+
+``` r
+weightLogInfo <- read_csv(paste0(data_path,"weightLogInfo_merged.csv"),
+    col_types = cols(Id = col_character(), 
+        Date = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+skim_without_charts(weightLogInfo)
+```
+
+|                                                  |               |
+|:-------------------------------------------------|:--------------|
+| Name                                             | weightLogInfo |
+| Number of rows                                   | 67            |
+| Number of columns                                | 8             |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |               |
+| Column type frequency:                           |               |
+| character                                        | 1             |
+| logical                                          | 1             |
+| numeric                                          | 5             |
+| POSIXct                                          | 1             |
+| \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ |               |
+| Group variables                                  | None          |
+
+Data summary
+
+**Variable type: character**
+
+| skim_variable | n_missing | complete_rate | min | max | empty | n_unique | whitespace |
+|:--------------|----------:|--------------:|----:|----:|------:|---------:|-----------:|
+| Id            |         0 |             1 |  10 |  10 |     0 |        8 |          0 |
+
+**Variable type: logical**
+
+| skim_variable  | n_missing | complete_rate | mean | count            |
+|:---------------|----------:|--------------:|-----:|:-----------------|
+| IsManualReport |         0 |             1 | 0.61 | TRU: 41, FAL: 26 |
+
+**Variable type: numeric**
+
+| skim_variable | n_missing | complete_rate |         mean |            sd |           p0 |          p25 |          p50 |          p75 |         p100 |
+|:--------------|----------:|--------------:|-------------:|--------------:|-------------:|-------------:|-------------:|-------------:|-------------:|
+| WeightKg      |         0 |          1.00 | 7.204000e+01 |         13.92 | 5.260000e+01 | 6.140000e+01 | 6.250000e+01 | 8.505000e+01 | 1.335000e+02 |
+| WeightPounds  |         0 |          1.00 | 1.588100e+02 |         30.70 | 1.159600e+02 | 1.353600e+02 | 1.377900e+02 | 1.875000e+02 | 2.943200e+02 |
+| Fat           |        65 |          0.03 | 2.350000e+01 |          2.12 | 2.200000e+01 | 2.275000e+01 | 2.350000e+01 | 2.425000e+01 | 2.500000e+01 |
+| BMI           |         0 |          1.00 | 2.519000e+01 |          3.07 | 2.145000e+01 | 2.396000e+01 | 2.439000e+01 | 2.556000e+01 | 4.754000e+01 |
+| LogId         |         0 |          1.00 | 1.461772e+12 | 782994783\.61 | 1.460444e+12 | 1.461079e+12 | 1.461802e+12 | 1.462375e+12 | 1.463098e+12 |
+
+**Variable type: POSIXct**
+
+| skim_variable | n_missing | complete_rate | min                 | max                 | median              | n_unique |
+|:--------------|----------:|--------------:|:--------------------|:--------------------|:--------------------|---------:|
+| Date          |         0 |             1 | 2016-04-12 06:47:11 | 2016-05-12 23:59:59 | 2016-04-27 23:59:59 |       56 |
+
+We load the final file. Only 8 users out of the 33 input their weight at
+all. Of them, only two do so consistently. It could be interesting to
+see if these two represent a distinct segment of users that tracks with
+their device more often and are more seriously into fitness? Curiously,
+whether the weight is automatically input does not make a difference on
+the number of records, suggesting that this is not such an important
+feature:
+
+``` r
+weightLogInfo %>% group_by(Id, IsManualReport) %>% summarise(count = n(), mean = mean(WeightKg), sd = sd(WeightPounds)) %>% arrange(desc(count))
+```
+
+    ## `summarise()` has grouped output by 'Id'. You can override using the `.groups`
+    ## argument.
+
+    ## # A tibble: 8 x 5
+    ## # Groups:   Id [8]
+    ##   Id         IsManualReport count  mean     sd
+    ##   <chr>      <lgl>          <int> <dbl>  <dbl>
+    ## 1 6962181067 TRUE              30  61.6  0.856
+    ## 2 8877689391 FALSE             24  85.1  1.00 
+    ## 3 4558609924 TRUE               5  69.6  1.10 
+    ## 4 1503960366 TRUE               2  52.6  0    
+    ## 5 2873212765 TRUE               2  57    0.935
+    ## 6 4319703577 TRUE               2  72.4  0.156
+    ## 7 1927972279 FALSE              1 134.  NA    
+    ## 8 5577150313 FALSE              1  90.7 NA
+
+Great! We now have a very good idea of how the data is organized and
+which kind of questions we can answer with it.

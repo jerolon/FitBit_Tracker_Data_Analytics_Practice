@@ -242,3 +242,47 @@ grid.arrange(g1,g2,g3,g4, nrow = 2)
 ```
 
 The relationship between these variables depends on the heart rate and on the body weight, that is why the graphs are so unclear. Nevertheless, the graph between METs and calories suggests that there is linear relationship between them that depends only on each user.
+
+### Loading sleep data
+Sleep data by day. Will be interesting to ask if the users who input sleep data also logged more days or use their device more for longer during waking hours?
+
+To check the credibility of the data, we plot the difference between the sleep minutes and wake minutes. We call this tiredness but it could be due to insomnia or some other factor like misclassification by the device. No value should be negative, unless they are sleeping on their feet.
+
+```{r load sleep data, message=FALSE, warning=FALSE}
+sleepDay <- read_csv(paste0(data_path,"sleepDay_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        SleepDay = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+mutate(sleepDay, tiredness = TotalTimeInBed - TotalMinutesAsleep) %>% group_by(Id) %>% summarise(tired = mean(tiredness)) %>% ggplot() + geom_col(aes(x=Id, y= tired)) + theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + labs(ylab = "Minutes", title = "Tiredness", subtitle = "Mean minutes awake in bed by user")
+```
+
+Most users mean difference is half an hour, or less, meaning they do not take long to fall sleep and get out of bed easily. Users 1844 and 3977 spend almost 3 hours in bed without sleeping. This could mean their data is not credible or is part of their routine. Checking user 1844 it seems that there are only 3 sleep records and all three have the exact same number of total minutes in bed: 961. This probably means the data for this user is unreliable. User 3977 seems to have a genuine sleep problem, since there is no day that they do not spend more than 100 minutes awake in bed. Using the lubridate package function wday() I saw that this happens any day of the week (I thought they could be only tracking their sleep on weekends). I will not show data for these users, but will filter it out.
+
+```{r sleep, message=FALSE, warning=FALSE}
+sleepDay <- sleepDay %>% filter(Id != 3977333714, Id != 1844505072)
+
+sleepDay %>% ggplot(aes(x = Id, y = TotalMinutesAsleep)) + geom_boxplot() + geom_jitter() + theme_bw() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + labs(ylab = "Minutes", title = "Total Minutes Asleep", subtitle = "Boxplot of total daily minutes asleep by user")
+```
+
+From the above graph, it is clear that the data for 2026 and 7007 is also unreliable due to very few datapoints and less than 100 minutes of sleep. It is not clear that we should filter all the records that are lower than 200 without further data exploration. People are able to sleep for less than 3 hours for a few days. We will filter records from users with fewer than 3 days of sleep tracking, though:
+
+```{r filter sleep low, message=FALSE, warning=FALSE}
+sleepDay <- sleepDay %>% group_by(Id) %>% filter(n()>3)
+```
+
+### Load weight info
+
+```{r weight info, message=FALSE, warning=FALSE}
+weightLogInfo <- read_csv(paste0(data_path,"weightLogInfo_merged.csv"),
+    col_types = cols(Id = col_character(), 
+        Date = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+skim_without_charts(weightLogInfo)
+```
+We load the final file. Only 8 users out of the 33 input their weight at all. Of them, only two do so consistently. It could be interesting to see if these two represent a distinct segment of users that tracks with their device more often and are more seriously into fitness? Curiously, whether the weight is automatically input does not make a difference on the number of records, suggesting that this is not such an important feature:
+
+```{r weight summary by user}
+weightLogInfo %>% group_by(Id, IsManualReport) %>% summarise(count = n(), mean = mean(WeightKg), sd = sd(WeightPounds)) %>% arrange(desc(count))
+```
+
+Great! We now have a very good idea of how the data is organized and which kind of questions we can answer with it.
