@@ -1,0 +1,203 @@
+---
+title: "Data Cleaning and manipulation"
+author: "Jeronimo Miranda"
+date: '2023-05-16'
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(skimr)
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r directory setup, include = FALSE}
+rstudioapi::getActiveDocumentContext
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+## Data Loading
+
+I will load the corresponding files from both folders and merge them using rbind. I will only show the code for loading and merging for dailyActivity, because it is repetitive, but will show the summaries and cleaning for all. In any case, the code is still in the .Rmd file. Aditionally, will remove the intermediate objects, once merged (the rm() function).
+
+```{r data loading, message=FALSE, warning=FALSE}
+data_path_A <- "../Fitabase Data 3.12.16-4.11.16/"
+data_path_B <- "../Fitabase Data 4.12.16-5.12.16/"
+dailyActivity_A <- read_csv(paste0(data_path_A,"dailyActivity_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityDate = col_date(format = "%m/%d/%Y")))
+
+dailyActivity_B <- read_csv(paste0(data_path_B,"dailyActivity_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityDate = col_date(format = "%m/%d/%Y")))
+
+dailyActivity <- rbind(dailyActivity_A, dailyActivity_B)
+rm(dailyActivity_A)
+rm(dailyActivity_B)
+skim_without_charts(dailyActivity)
+```
+### Daily sleep
+
+Interestingly, there is no daily sleep data for the 3.11 - 4.11 period.
+
+```{r sleep day}
+sleepDay <- read_csv(paste0(data_path_B,"sleepDay_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        SleepDay = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+skim_without_charts(sleepDay)
+```
+
+### Weight info
+
+Weight info is absent in the 3.11 - 4.11 period too
+```{r weight info, message=FALSE, warning=FALSE, echo=FALSE}
+weightLogInfo <- read_csv(paste0(data_path_B,"weightLogInfo_merged.csv"),
+    col_types = cols(Id = col_character(), 
+        Date = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+```
+
+```{r weight info show, message=FALSE, warning=FALSE}
+skim_without_charts(weightLogInfo)
+```
+### Hourly data
+
+```{r hourly loading, warning=FALSE, echo=FALSE}
+hourlyCalories_A <- read_csv(paste0(data_path_A, "hourlyCalories_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyCalories_B <- read_csv(paste0(data_path_B, "hourlyCalories_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyCalories <- rbind(hourlyCalories_A, hourlyCalories_B)
+rm(hourlyCalories_A); rm(hourlyCalories_B)
+
+hourlyIntensities_A <- read_csv(paste0(data_path_A, "hourlyIntensities_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyIntensities_B <- read_csv(paste0(data_path_B, "hourlyIntensities_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyIntensities <- rbind(hourlyIntensities_A, hourlyIntensities_B)
+rm(hourlyIntensities_A); rm(hourlyIntensities_B)
+
+hourlyStepsA <- read_csv(paste0(data_path_A, "hourlySteps_merged.csv"), col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlyStepsB <- read_csv(paste0(data_path_B, "hourlySteps_merged.csv"), col_types = cols(Id = col_character(), 
+        ActivityHour = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+hourlySteps <- rbind(hourlyStepsA, hourlyStepsB)
+rm(hourlyStepsA); rm(hourlyStepsB)
+
+hourlyActivity <- inner_join(hourlyCalories, hourlyIntensities, by = c("Id","ActivityHour")) %>% inner_join(hourlySteps, by = c("Id", "ActivityHour"))
+```
+
+```{r hourly loading show, warning=FALSE}
+skim_without_charts(hourlyActivity)
+```
+
+### Minute data
+
+I will only check the narrow minute files.
+
+```{r minute data loading, message=FALSE, warning=FALSE, include=FALSE}
+minuteCaloriesA <- read_csv(paste0(data_path_A, "minuteCaloriesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteCaloriesB <- read_csv(paste0(data_path_B, "minuteCaloriesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+
+minuteIntensitiesA <- read_csv(paste0(data_path_A,"minuteIntensitiesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+minuteIntensitiesB <- read_csv(paste0(data_path_B,"minuteIntensitiesNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteStepsA <- read_csv(paste0(data_path_A,"minuteStepsNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteStepsB <- read_csv(paste0(data_path_B,"minuteStepsNarrow_merged.csv"), 
+    col_types = cols(Id = col_character(), 
+        ActivityMinute = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+
+minuteCalories <- rbind(minuteCaloriesA, minuteCaloriesB)
+rm(minuteCaloriesA, minuteCaloriesB)
+
+minuteSteps <- rbind(minuteStepsA, minuteStepsB)
+rm(minuteStepsA, minuteStepsB)
+
+minuteIntensities <- rbind(minuteIntensitiesA, minuteIntensitiesB)
+rm(minuteIntensitiesA, minuteIntensitiesB)
+```
+
+```{r}
+minuteActivity <- inner_join(minuteCalories, minuteIntensities, by = c("Id","ActivityMinute")) %>% inner_join(minuteSteps, by = c("Id", "ActivityMinute"))
+skim_without_charts(minuteActivity)
+```
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+## Plotting a few explorations
+
+What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+
+```{r}
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
+```
+
+What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+
+```{r}
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
+```
+
+What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
+
+## Merging these two datasets together
+
+
+
+Take a look at how many participants are in this data set.
+
+```{r}
+#n_distinct(combined_data$Id)
+```
+
+Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
+
+Now you can explore some different relationships between activity and sleep as well. For example, do you think participants who sleep more also take more steps or fewer steps per day? Is there a relationship at all? How could these answers help inform the marketing strategy of how you position this new product?
+
+This is just one example of how to get started with this data - there are many other files and questions to explore as well!
+
+```{r load heart rate, warning=FALSE, echo=FALSE}
+heartrate_seconds_A <- read_csv(paste0(data_path_A,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
+
+heartrate_seconds_B <- read_csv(paste0(data_path_B,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
+## Splitting the date time column into date and time
+heartrate_seconds <- rbind(heartrate_seconds_A, heartrate_seconds_B)
+rm(heartrate_seconds_A)
+rm(heartrate_seconds_B)
+```
+
+```{r show heart rate, warning=FALSE}
+skim_without_charts(heartrate_seconds)
+```
+
+## Check Ids for all files
