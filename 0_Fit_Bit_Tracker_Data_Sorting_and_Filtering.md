@@ -13,8 +13,9 @@ exploration of the data’s quirks.
 ### Daily activity data
 
 I am loading the Ids as character because summary statistics like mean
-or meadian are irrelevant whereas string comparisons like do all have
-the same amount of characters and how many are unique are important.
+or median are irrelevant whereas string comparisons like “do all Ids
+have the same amount of characters” and “how many are unique” are
+important to know for knowing about the data integrity.
 
 ``` r
 data_path <- "../Fitabase Data 4.12.16-5.12.16/"
@@ -77,7 +78,7 @@ rendered as an html table, which is quite nice.
 What we can see from this summary:
 
 - 33 unique Ids, all have 10 characters.
-- Data was collected for 31 days.
+- Data was collected for 31 days, from april 12 to may 12.
 - The minimum for **all** numeric variables is 0. This suggests empty
   days, maybe just days that people did not wear their devices. These
   rows should be eliminated.
@@ -88,8 +89,10 @@ What we can see from this summary:
   most activity is done via trackerDistance rather than LoggedActivities
 
 Total distance is not the sum of TrackerDistance and
-LoggedActivitiesDistance, as one could assume. Rather it seems to be the
-sum of the ActiveDistances columns. Lack of metadata is killing me here.
+LoggedActivitiesDistance, as one could assume. For most records,
+TotalDistance and TrackerDistance are the same, thought there are
+exceptions. Rather it seems to be the sum of the ActiveDistances
+columns. Lack of metadata is killing me here.
 
 ``` r
 filter(dailyActivity, TotalDistance != (LoggedActivitiesDistance + TrackerDistance))
@@ -121,8 +124,10 @@ We group the days by Id and then plot a histogram of how many days
 people in the dataset were tracked
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/number%20of%20days%20tracked-1.png)<!-- -->
 
+User **4057192912** is an outlier, having data only for four days.
+
 Running `select(dailyActivity, Id, ActivityDate) %>% distinct()` shows
-that there are no duplicate dates for any Id
+that there are no duplicate dates for any Id.
 
 Data seems very redundant. The files `dailyCalories_merged.csv`,
 `daily_Intensities_merged` and `dailySteps_merged.csv` are just column
@@ -132,8 +137,9 @@ subsets of `dailyActivity_merged.csv`
 
 ``` r
 heartrate_seconds <- read_csv(paste0(data_path,"heartrate_seconds_merged.csv"), 
-    col_types = cols(Id = col_character(), Time = col_character(), Value = col_double()))
-heartrate_date_time <- transmute(heartrate_seconds, Id, date_time = mdy_hms(Time), Value, hour_of_day = hms::as_hms(date_time), dia = date(date_time))
+    col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
+## Splitting the date time column into date and time
+heartrate_date_time <- transmute(heartrate_seconds, Id, date_time = Time, Value, hour_of_day = hms::as_hms(date_time), dia = date(date_time))
 skim_without_charts(heartrate_date_time)
 ```
 
@@ -294,7 +300,10 @@ fitbits for two months continuously. Heart rate data can be used in the
 analysis section to answer this question.
 
 ``` r
-hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour)) %>% group_by(Id) %>% mutate(gap = ActivityHour - lag(ActivityHour)) %>% ungroup() %>%  group_by(gap) %>% summarise(gaps = n())
+hourlyActivity %>% select(Id, ActivityHour) %>%
+  mutate(fecha = date(ActivityHour)) %>% 
+  group_by(Id) %>% 
+  mutate(gap = ActivityHour - lag(ActivityHour)) %>% ungroup() %>%  group_by(gap) %>% summarise(gaps = n())
 ```
 
     ## # A tibble: 2 x 2
@@ -303,13 +312,41 @@ hourlyActivity %>% select(Id, ActivityHour) %>% mutate(fecha = date(ActivityHour
     ## 1  1 hours 22066
     ## 2 NA hours    33
 
+Last, a summary table looking at when the tracking data begins and ends
+for each user: the beginning is the same for all: 12 am on april 12.
+This suggests that the data was cut to give them a consistent start
+date, because users did not just start using their tracker on midnight
+the same day. The end times are variable, even when most data ends on
+the same day.
+
+``` r
+hourlyActivity %>% group_by(Id) %>% summarise(beginning_of_tracking = min(ActivityHour), end_of_tracking = max(ActivityHour))
+```
+
+    ## # A tibble: 33 x 3
+    ##    Id         beginning_of_tracking end_of_tracking    
+    ##    <chr>      <dttm>                <dttm>             
+    ##  1 1503960366 2016-04-12 00:00:00   2016-05-11 20:00:00
+    ##  2 1624580081 2016-04-12 00:00:00   2016-05-12 15:00:00
+    ##  3 1644430081 2016-04-12 00:00:00   2016-05-11 11:00:00
+    ##  4 1844505072 2016-04-12 00:00:00   2016-05-12 10:00:00
+    ##  5 1927972279 2016-04-12 00:00:00   2016-05-12 15:00:00
+    ##  6 2022484408 2016-04-12 00:00:00   2016-05-12 15:00:00
+    ##  7 2026352035 2016-04-12 00:00:00   2016-05-12 15:00:00
+    ##  8 2320127002 2016-04-12 00:00:00   2016-05-12 14:00:00
+    ##  9 2347167796 2016-04-12 00:00:00   2016-04-29 05:00:00
+    ## 10 2873212765 2016-04-12 00:00:00   2016-05-12 15:00:00
+    ## # ... with 23 more rows
+
 ### Loading minute data
 
 Minute data has the peculiarity that each feature is present in **Wide**
 and **Narrow** modalities. My first guess was *Wide* meant that each
-user had its oen column, but it is actually that files have a row per
-hour and each column is a minute. This is awful, but a good opportunity
-to try the package called “lubridate”.
+user had its own column, but it is actually that files have a row per
+hour and each column is a minute. I do not understand the rationality
+behind this, but wide formats are often useful for visualizations. In
+any case, it is a good opportunity to use the package called
+“lubridate”.
 
 The features present with minute resolution are:
 
@@ -385,10 +422,10 @@ minuteCalories
     ## # ... with 1,346,210 more rows
 
 ``` r
-#Group the minuteCalories by hour and sum the cals. A column in the summerise function lets us check that we are not including hours where not all minutes are present
-minuteCalories2hour <- minuteCalories %>% transmute(Id, 
-                                                    ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), 
-                                                    Calories) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), n_minutes = n())
+#Group the minuteCalories by hour and sum the cals. A column in the summarise function lets us check that we are not including hours where not all minutes are present
+minuteCalories2hour <- minuteCalories %>% transmute(Id, ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute)), Calories) %>%
+group_by(Id, ActivityHour) %>% 
+summarise(Calories = round(sum(Calories)), n_minutes = n())
 
 minuteCalories2hour <- minuteCalories2hour %>% filter(n_minutes == 60) %>% select(-n_minutes)
 setdiff(minuteCalories2hour, hourlyCalories)
@@ -411,14 +448,18 @@ setdiff(minuteCalories2hour, hourlyCalories)
     ## # ... with 328 more rows
 
 Not clear what is going on. A clue might be in the days that do not have
-the full 24 hours.
+the full 24 hours. That is, the hourly data only has 24 hour days. But
+the minute data includes the hours from the days where this is not the
+case. Even though the number of different rows are small, the
+discrepancy should be taken into account depending on the analysis.
 
 #### Intensities and Steps data
 
 We loaded Intensities and steps data, which are also in Wide/Narrow
 formats and did the same operations as above for the calories,
 therefore, we do not show that code here. Nevertheless, we will merge
-the three files into a single minute dataframe.
+the three files into a single minute dataframe called “minuteActivity”
+that will be used in the next section.
 
 ### Loading METs data
 
@@ -426,8 +467,8 @@ METs, or [Metabolically equivalent
 minutes](https://en.wikipedia.org/wiki/Metabolic_equivalent_of_task) is,
 according to wikipedia: “the objective measure of the ratio of the rate
 at which a person expends energy, relative to the mass of that person”.
-It also says it is a way to grade activity levels.Therefore, we will
-join it with the minute dataset in order to compare the relationships
+It also says it is a way to grade activity levels. Therefore, we will
+join it with the minute data set in order to compare the relationships
 between them.
 
 ``` r
@@ -448,8 +489,8 @@ grid.arrange(g1,g2,g3,g4, nrow = 2)
 
 The relationship between these variables depends on the heart rate and
 on the body weight, that is why the graphs are so unclear. Nevertheless,
-the graph between METs and calories suggests that there is linear
-relationship between them that depends only on each user.
+the graph between METs and calories (bottom left) suggests that there is
+linear relationship between them that depends only on each user.
 
 ### Loading sleep data
 
@@ -493,10 +534,13 @@ sleepDay %>% ggplot(aes(x = Id, y = TotalMinutesAsleep)) + geom_boxplot() + geom
 ```
 
 ![](0_Fit_Bit_Tracker_Data_Sorting_and_Filtering_files/figure-gfm/sleep-1.png)<!-- -->
+
 From the above graph, it is clear that the data for 2026 and 7007 is
-also unreliable due to very few datapoints and less than 100 minutes of
-sleep. We will filter records from users with fewer than 3 days of sleep
-tracking:
+also unreliable due to very few data points and less than 100 minutes of
+sleep. It is not clear that we should filter all the records that are
+lower than 200 without further data exploration. People are able to
+sleep for less than 3 hours for a few days. We will filter records from
+users with fewer than 3 days of sleep tracking, though:
 
 ``` r
 sleepDay <- sleepDay %>% group_by(Id) %>% filter(n()>3)
