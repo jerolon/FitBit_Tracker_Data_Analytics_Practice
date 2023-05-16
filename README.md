@@ -28,8 +28,14 @@ The data is in the public domain with a CC0 license and it is secure and accessi
 - Verification of the data integrity was done by going to the original source, downloading and then exploring the file contents. The files were not corrupted.
 - It is split in half.
 - It is redundant, and not well documented.
+- **Correction**: the metadata is available [here](https://www.fitabase.com/media/1930/fitabasedatadictionary102320.pdf)
 
 
 Here is a notebook detailing the structure of the different tables and preliminary exploration. It contains only the second half of the data present in the kaggle website:
 
 [Data loading, sorting, and filtering](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/0_Fit_Bit_Tracker_Data_Sorting_and_Filtering.md)
+
+## Data cleaning
+We have 35 unique Ids, which is a minimum sample size. 
+
+[Data cleaning documentation](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/1_Data_Cleaning_and_manipulation.md)
