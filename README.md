@@ -14,11 +14,11 @@ The main takeaways from this **preparation** step:
 - Minute data is also reported in wide format, where each row is an hour by user and each column is the data at a given minute. Since this makes the data rectangular, hours where not all minutes were reported are missing.
 
 #### Data credibility. Does the data ROCCC?
-- The data is not complete as presented on the kaggle website. It is half of the data the data from 3.11.2016-4.11.2016 is missing. Nevertheless, it has been used broadly and it is vetted. The first half of the data, contains two users not present in the kaggle website and will be added for the analysis.
+- The data is not complete as presented on the kaggle website. It is half of the data: the data from 3.11.2016-4.11.2016 is missing. Nevertheless, it has been used broadly and it is vetted. The first half of the data, contains two users not present in the kaggle website and will be added for the analysis.
 - The original source is from the 2016 publication, going to the original zenodo source makes it clear that we are only dealing with half the data set.
-- The data is not comprehensive, it does not contain any metadata. The units for distance are not specified, and it is not described whether they were calculated from steps or from GPS. We do not know how is "Intensity" defined.
+- The data is not comprehensive, it does not contain any metadata. The units for distance are not specified, and it is not described whether they were calculated from steps or from GPS. We do not know how is "Intensity" defined. For this information, you must go to the original publication or to the fitbit website, and even then it is not straightforward.
 - The data is not so current anymore, it is from 2016, but it could still give some insights. You would have to have in mind that these are 2016 trends in 2023.
-There is no missing data
+- There are no missing values as verified by skim_without_chart. The data was cleaned in the original study.
 - The data is cited, it is part from an academic study.
 
 #### Licensing, privacy, security and accessibility:
