@@ -48,6 +48,9 @@ rm(dailyActivity_A)
 rm(dailyActivity_B)
 skim_without_charts(dailyActivity)
 ```
+
+We must note the inconsistency between the name of the columns ModeratelyActiveDistance and FairlyActiveMinutes, which correspond to the same intensity category.
+
 ### Daily sleep
 
 Interestingly, there is no daily sleep data for the 3.11 - 4.11 period.
@@ -174,23 +177,6 @@ rm(heartrate_seconds_B)
 ```{r show heart rate, warning=FALSE}
 skim_without_charts(heartrate_seconds)
 ```
-
-## Plotting a few explorations
-
-What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
-
-```{r}
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
-```
-
-What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
-
-```{r}
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
-```
-
-What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
-
 ## Data validation and cleaning
 
 #### Checking Ids
@@ -222,7 +208,7 @@ We know that dates are correct because of how we imported them with readr. If an
 ggplot(dailyActivity, aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = Calories)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Daily calorie expenditure by user throught the study period")
 ```
 
-I love this graph because it immediately tells a lot of info: why it was decided to cut the original kaggle dataset from april 12, which users have gaps, and suspicious days of very low calorie expenditure. It is a sort of conditional formatting for the data. 
+I love this graph because it immediately tells a lot of info: why it was decided to cut the original kaggle data set from april 12, which users have gaps, and suspicious days of very low calorie expenditure. It is a sort of conditional formatting for the data. 
 I prefer to keep all available dates for now, because there is no need for the data to be exactly simultaneous.
 
 Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. We also check there is only one record per date per Id. Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a date.
@@ -241,7 +227,7 @@ dailyActivity %>% mutate(totalMinutes = VeryActiveMinutes + FairlyActiveMinutes 
 Sleep data is very irregular and it is not clear why. There is also a tendency for the users with very few days to have too little or too much sleep. I will not filter out these users because there is also information of how they use the device, so it is useful. It has to be kept in mind when analyzing the sleep durations, though. The number of minutes sleeping in general seems plausible.
 
 ```{r plotting sleep data, echo=FALSE}
-ggplot(sleepDay, aes(x = SleepDay, y = Id)) + geom_tile(aes(fill = TotalMinutesAsleep)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Daily calorie expenditure by user throught the study period")
+ggplot(sleepDay, aes(x = SleepDay, y = Id)) + geom_tile(aes(fill = TotalMinutesAsleep)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Sleep", subtitle = "Daily minutes spent asleep by user")
 ```
 
 The sanity checks are no record Id/SleepDay duplication and that minutes in a day do not exceed $60 * 24 = 1440$, although we have already seen this is not the case in the skim_without_charts summary.
@@ -282,17 +268,85 @@ Next, we will compare this aggregated data set with the existing dailyActivity d
 left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories, diffSteps = TotalSteps - DStep, number_of_hours) %>% ggplot(aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = diffCal)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie error", subtitle = "Difference between daily and hourly aggregated data per user per day")
 ```
 
-Most days coincide, some error could be expected due to aggregation issues or rounding. But what about the substantial divergences? I am tempted to delete the outliers, but I will wait until the minute-level comparison. The biggest discrepancies occur in days that are not on the edges and that have the full 24 hours. One of these days is also the maximum calories in the activity data,. The other is an instance in which the number of sedentary minutes is 1440 (The whole day), yet the distance and number of steps are huge. Therefore it is possible that it is just wrong.
+Most days coincide, some error could be expected due to aggregation issues or rounding. But what about the substantial divergences? The biggest discrepancies occur in days that are not on the edges and that have the full 24 hours. One of these days is also the maximum calories in the activity data. The other is an instance in which the number of sedentary minutes is 1440 (The whole day), yet the distance and number of steps are huge. I do not see how this is possible, only if the person kept the tracker in the backpack all day or something, therefore, I will erase these two records that differ the most in steps or calories between the daily and the hourly data.
 
 ```{r echo=FALSE}
-left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories, Calories, TotalSteps, diffSteps = TotalSteps - DStep, number_of_hours) %>% filter(abs(diffSteps) == max(abs(diffSteps), na.rm = T))
+left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% mutate(diffCal = Calories - DCalories, diffSteps = TotalSteps - DStep) %>% filter(abs(diffCal) == max(abs(diffCal), na.rm = T))
 
-left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories,  Calories, TotalSteps, diffSteps = TotalSteps - DStep, number_of_hours) %>% filter(abs(diffCal) == max(abs(diffCal), na.rm = T))
+left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% mutate(diffCal = Calories - DCalories, diffSteps = TotalSteps - DStep) %>% filter(abs(diffSteps) == max(abs(diffSteps), na.rm = T))
+
+dailyActivity <- dailyActivity %>%  filter(!(Id == "8583815059" & ActivityDate == ymd(20160503)))
+
+dailyActivity <- dailyActivity %>%  filter(!(Id == "6117666160" & ActivityDate == ymd(20160421)))
 ```
 
+### Daily activity revisited
+
+This motivates me to explore the relationships in the dailyActivity data to understand it better. It seems from the graph that The "TotalDistance" is calculated from the number of steps for each individual user. That is the reason that TotalDistance is different from tracked distance, which comes from GPS.
+
+```{r steps and distance, echo = F}
+dailyActivity %>% ggplot() + geom_point(aes(x = TotalSteps, y = TotalDistance)) + theme_bw() + labs(title = "The Total distance is calculated from Steps", subtitle = "Daily Total steps have a linear relationship with distance")
+```
+
+We can sum the active distances from different excercise intensities (ACtive, moderate, Light and Sendentary) and check their relationship with the total distance.
+
+```{r}
+dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance)  %>%  ggplot() + geom_point(aes(x = ActiveDistances, y = TotalDistance)) + theme_bw() + labs(title = "Sum of active distances vs Total Distance", subtitle = "The distances roughly coincide")
+```
+
+We see that the graph is completely linear and that the sum of the distances is the same as the total distance in most cases. The total distance is never less than the sum of Active Distances, showing that the error is not random. I do not trust the points that diverge by more than 1 km. Specially the ones where the Active Distance is zero. An explanation for this is that people carried their device that day on their backpack or something, therefore steps or GPS were recorded, but not the heartrate, which determines intensity. Therefore, we will filter them out:
+
+```{r filter divergent distances}
+dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-ActiveDistances)
+```
+I do not show this but this filter has the advantage of dropping more of the highly divergent data from the hourly data we saw above (see graph Daily Calorie Error), mostly for the user "402033". This gives me more confidence that dropping these data is correct.
+
+#### Velocities
+
+I want to do a further sanity check on the Active columns. I want to check that there are no instances where VeryActiveDistance of 0 corresponds to a non-zero VeryActiveMinutes, which would be inconsistent. For this, we can use the xor function. Xor() will return FALSE if the data is correct, that is if both values are non-zero, or if both are zero, any discrepancy will result in a TRUE value. Of course, it is possible to have 0 distance with positive minutes, by working out in a stationary bike, for example, so we further filter to get only the rows where the time is zero but the distance is non-zero.
+
+```{r}
+filter_vector <- xor(dailyActivity$VeryActiveDistance, dailyActivity$VeryActiveMinutes)
+filter(dailyActivity, filter_vector, VeryActiveMinutes == 0)
+
+filter_vector <- xor(dailyActivity$ ModeratelyActiveDistance, dailyActivity$ FairlyActiveMinutes)
+filter(dailyActivity, filter_vector, FairlyActiveMinutes == 0)
+
+filter_vector <- xor(dailyActivity$LightActiveDistance, dailyActivity$LightlyActiveMinutes)
+filter(dailyActivity, filter_vector, LightlyActiveMinutes == 0)
+
+filter_vector <- xor(dailyActivity$SedentaryActiveDistance, dailyActivity$SedentaryMinutes)
+filter(dailyActivity, filter_vector, SedentaryMinutes == 0)
+```
+
+Our data is consistent, at least in this way. Being sure of this, now I want to know the average velocity of people in the different categories. Multiplication by 60 is done to transform minutes to km/hour
+
+```{r velocities, echo=FALSE, warning=FALSE}
+dailyActivity %>% mutate(HighVelocity = 60 * VeryActiveDistance/VeryActiveMinutes,  ModerateVelocity = 60 * ModeratelyActiveDistance/FairlyActiveMinutes, LightVelocity = 60 *  LightActiveDistance/LightlyActiveMinutes, SedentaryVelocity = 60 * SedentaryActiveDistance/SedentaryMinutes) %>% 
+    #it has to be transformed to long format
+    pivot_longer(names_to = "Intensity_Class", values_to = "Velocity", cols = ends_with("Velocity")) %>% 
+    #Boxplot
+    ggplot(aes(x = Intensity_Class, y = Velocity)) + geom_jitter(alpha = 0.2) + geom_boxplot(outlier.shape = NA) + theme_bw() 
+```
+
+This is at the same time a sanity check (no one is travelling at 100 km/h, no sedentary velocity is significantly above 0) and an overview of the kind of activities people are doing. A few jog. Most walk (or swim?). The zero velocities in all categories apart from sedentary are probably people on a treadmill or stationary bike, or lifting weights. Lower than average velocities could be people hiking, swimming or going upstairs: intense activities that do not cover much distance.
 
 
+## Plotting a few explorations
 
+What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+
+```{r}
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
+```
+
+What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+
+```{r}
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
+```
+
+What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
 
 Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
 

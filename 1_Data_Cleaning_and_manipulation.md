@@ -84,6 +84,10 @@ Data summary
 | SedentaryMinutes         |         0 |             1 | 1001.35 |  304.17 |   0 |  734.00 | 1062.00 |  1246.00 |  1440.00 |
 | Calories                 |         0 |             1 | 2294.81 |  725.53 |   0 | 1820.00 | 2129.00 |  2781.00 |  4900.00 |
 
+We must note the inconsistency between the name of the columns
+ModeratelyActiveDistance and FairlyActiveMinutes, which correspond to
+the same intensity category.
+
 ### Daily sleep
 
 Interestingly, there is no daily sleep data for the 3.11 - 4.11 period.
@@ -310,32 +314,6 @@ Data summary
 |:--------------|----------:|--------------:|:--------------------|:--------------------|:--------------------|---------:|
 | Time          |         0 |             1 | 2016-03-29 00:00:05 | 2016-05-12 16:20:00 | 2016-04-19 17:30:00 |  1456216 |
 
-## Plotting a few explorations
-
-What’s the relationship between steps taken in a day and sedentary
-minutes? How could this help inform the customer segments that we can
-market to? E.g. position this more as a way to get started in walking
-more? Or to measure steps that you’re already taking?
-
-``` r
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
-```
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
-
-What’s the relationship between minutes asleep and time in bed? You
-might expect it to be almost completely linear - are there any
-unexpected trends?
-
-``` r
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
-```
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
-
-What could these trends tell you about how to help market this product?
-Or areas where you might want to explore further?
-
 ## Data validation and cleaning
 
 #### Checking Ids
@@ -403,7 +381,7 @@ way to plot each day with its calorie expenditure value.
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/calendar%20plot%20of%20activity-1.png)<!-- -->
 
 I love this graph because it immediately tells a lot of info: why it was
-decided to cut the original kaggle dataset from april 12, which users
+decided to cut the original kaggle data set from april 12, which users
 have gaps, and suspicious days of very low calorie expenditure. It is a
 sort of conditional formatting for the data. I prefer to keep all
 available dates for now, because there is no need for the data to be
@@ -529,7 +507,7 @@ hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% su
 
 We will not graph all the hours, instead we will group by day.
 
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 This is really baffling. There is Calories data for almost all users for
 the first half of the study, the data is collected for 24 hours except
@@ -544,27 +522,189 @@ Next, we will compare this aggregated data set with the existing
 dailyActivity data frame. We use a left join to keep only the dates that
 exist in the original dailyActivity.
 
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 Most days coincide, some error could be expected due to aggregation
-issues or rounding. But what about the substantial divergences? I am
-tempted to delete the outliers, but I will wait until the minute-level
-comparison. The biggest discrepancies occur in days that are not on the
-edges and that have the full 24 hours. One of these days is also the
-maximum calories in the activity data,. The other is an instance in
-which the number of sedentary minutes is 1440 (The whole day), yet the
-distance and number of steps are huge. Therefore it is possible that it
-is just wrong.
+issues or rounding. But what about the substantial divergences? The
+biggest discrepancies occur in days that are not on the edges and that
+have the full 24 hours. One of these days is also the maximum calories
+in the activity data. The other is an instance in which the number of
+sedentary minutes is 1440 (The whole day), yet the distance and number
+of steps are huge. I do not see how this is possible, only if the person
+kept the tracker in the backpack all day or something, therefore, I will
+erase these two records that differ the most in steps or calories
+between the daily and the hourly data.
 
-    ## # A tibble: 1 x 7
-    ##   Id         ActivityDate diffCal Calories TotalSteps diffSteps number_of_hours
-    ##   <chr>      <date>         <dbl>    <dbl>      <dbl>     <dbl>           <int>
-    ## 1 8583815059 2016-05-03      1196     3212      12015     12015              24
+    ## # A tibble: 1 x 20
+    ##   Id         ActivityD~1 Total~2 Total~3 Track~4 Logge~5 VeryA~6 Moder~7 Light~8
+    ##   <chr>      <date>        <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>
+    ## 1 6117666160 2016-04-21    19542    15.0    15.0       0   0.980   0.400    5.62
+    ## # ... with 11 more variables: SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   number_of_hours <int>, DCalories <dbl>, DStep <dbl>, diffCal <dbl>,
+    ## #   diffSteps <dbl>, and abbreviated variable names 1: ActivityDate,
+    ## #   2: TotalSteps, 3: TotalDistance, 4: TrackerDistance,
+    ## #   5: LoggedActivitiesDistance, 6: VeryActiveDistance, ...
 
-    ## # A tibble: 1 x 7
-    ##   Id         ActivityDate diffCal Calories TotalSteps diffSteps number_of_hours
-    ##   <chr>      <date>         <dbl>    <dbl>      <dbl>     <dbl>           <int>
-    ## 1 6117666160 2016-04-21      2535     4900      19542     10449              24
+    ## # A tibble: 1 x 20
+    ##   Id         ActivityD~1 Total~2 Total~3 Track~4 Logge~5 VeryA~6 Moder~7 Light~8
+    ##   <chr>      <date>        <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>
+    ## 1 8583815059 2016-05-03    12015    9.37    9.37       0       0       0       0
+    ## # ... with 11 more variables: SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   number_of_hours <int>, DCalories <dbl>, DStep <dbl>, diffCal <dbl>,
+    ## #   diffSteps <dbl>, and abbreviated variable names 1: ActivityDate,
+    ## #   2: TotalSteps, 3: TotalDistance, 4: TrackerDistance,
+    ## #   5: LoggedActivitiesDistance, 6: VeryActiveDistance, ...
+
+### Daily activity revisited
+
+This motivates me to explore the relationships in the dailyActivity data
+to understand it better. It seems from the graph that The
+“TotalDistance” is calculated from the number of steps for each
+individual user. That is the reason that TotalDistance is different from
+tracked distance, which comes from GPS.
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/steps%20and%20distance-1.png)<!-- -->
+
+We can sum the active distances from different excercise intensities
+(ACtive, moderate, Light and Sendentary) and check their relationship
+with the total distance.
+
+``` r
+dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance)  %>%  ggplot() + geom_point(aes(x = ActiveDistances, y = TotalDistance)) + theme_bw() + labs(title = "Sum of active distances vs Total Distance", subtitle = "The distances roughly coincide")
+```
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+We see that the graph is completely linear and that the sum of the
+distances is the same as the total distance in most cases. The total
+distance is never less than the sum of Active Distances, showing that
+the error is not random. I do not trust the points that diverge by more
+than 1 km. Specially the ones where the Active Distance is zero. An
+explanation for this is that people carried their device that day on
+their backpack or something, therefore steps or GPS were recorded, but
+not the heartrate, which determines intensity. Therefore, we will filter
+them out:
+
+``` r
+dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-ActiveDistances)
+```
+
+I do not show this but this filter has the advantage of dropping more of
+the highly divergent data from the hourly data we saw above (see graph
+Daily Calorie Error), mostly for the user “402033”. This gives me more
+confidence that dropping these data is correct.
+
+#### Velocities
+
+I want to do a further sanity check on the Active columns. I want to
+check that there are no instances where VeryActiveDistance of 0
+corresponds to a non-zero VeryActiveMinutes, which would be
+inconsistent. For this, we can use the xor function. Xor() will return
+FALSE if the data is correct, that is if both values are non-zero, or if
+both are zero, any discrepancy will result in a TRUE value. Of course,
+it is possible to have 0 distance with positive minutes, by working out
+in a stationary bike, for example, so we further filter to get only the
+rows where the time is zero but the distance is non-zero.
+
+``` r
+filter_vector <- xor(dailyActivity$VeryActiveDistance, dailyActivity$VeryActiveMinutes)
+filter(dailyActivity, filter_vector, VeryActiveMinutes == 0)
+```
+
+    ## # A tibble: 0 x 16
+    ## # ... with 16 variables: Id <chr>, ActivityDate <date>, TotalSteps <dbl>,
+    ## #   TotalDistance <dbl>, TrackerDistance <dbl>, LoggedActivitiesDistance <dbl>,
+    ## #   VeryActiveDistance <dbl>, ModeratelyActiveDistance <dbl>,
+    ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   differencia <dbl>
+
+``` r
+filter_vector <- xor(dailyActivity$ ModeratelyActiveDistance, dailyActivity$ FairlyActiveMinutes)
+filter(dailyActivity, filter_vector, FairlyActiveMinutes == 0)
+```
+
+    ## # A tibble: 0 x 16
+    ## # ... with 16 variables: Id <chr>, ActivityDate <date>, TotalSteps <dbl>,
+    ## #   TotalDistance <dbl>, TrackerDistance <dbl>, LoggedActivitiesDistance <dbl>,
+    ## #   VeryActiveDistance <dbl>, ModeratelyActiveDistance <dbl>,
+    ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   differencia <dbl>
+
+``` r
+filter_vector <- xor(dailyActivity$LightActiveDistance, dailyActivity$LightlyActiveMinutes)
+filter(dailyActivity, filter_vector, LightlyActiveMinutes == 0)
+```
+
+    ## # A tibble: 0 x 16
+    ## # ... with 16 variables: Id <chr>, ActivityDate <date>, TotalSteps <dbl>,
+    ## #   TotalDistance <dbl>, TrackerDistance <dbl>, LoggedActivitiesDistance <dbl>,
+    ## #   VeryActiveDistance <dbl>, ModeratelyActiveDistance <dbl>,
+    ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   differencia <dbl>
+
+``` r
+filter_vector <- xor(dailyActivity$SedentaryActiveDistance, dailyActivity$SedentaryMinutes)
+filter(dailyActivity, filter_vector, SedentaryMinutes == 0)
+```
+
+    ## # A tibble: 0 x 16
+    ## # ... with 16 variables: Id <chr>, ActivityDate <date>, TotalSteps <dbl>,
+    ## #   TotalDistance <dbl>, TrackerDistance <dbl>, LoggedActivitiesDistance <dbl>,
+    ## #   VeryActiveDistance <dbl>, ModeratelyActiveDistance <dbl>,
+    ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
+    ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
+    ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
+    ## #   differencia <dbl>
+
+Our data is consistent, at least in this way. Being sure of this, now I
+want to know the average velocity of people in the different categories.
+Multiplication by 60 is done to transform minutes to km/hour
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/velocities-1.png)<!-- -->
+
+This is at the same time a sanity check (no one is travelling at 100
+km/h, no sedentary velocity is significantly above 0) and an overview of
+the kind of activities people are doing. A few jog. Most walk (or
+swim?). The zero velocities in all categories apart from sedentary are
+probably people on a treadmill or stationary bike, or lifting weights.
+Lower than average velocities could be people hiking, swimming or going
+upstairs: intense activities that do not cover much distance.
+
+## Plotting a few explorations
+
+What’s the relationship between steps taken in a day and sedentary
+minutes? How could this help inform the customer segments that we can
+market to? E.g. position this more as a way to get started in walking
+more? Or to measure steps that you’re already taking?
+
+``` r
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
+```
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+What’s the relationship between minutes asleep and time in bed? You
+might expect it to be almost completely linear - are there any
+unexpected trends?
+
+``` r
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
+```
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+What could these trends tell you about how to help market this product?
+Or areas where you might want to explore further?
 
 Note that there were more participant Ids in the daily activity dataset
 that have been filtered out using merge. Consider using ‘outer_join’ to
