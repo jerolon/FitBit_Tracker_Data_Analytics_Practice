@@ -41,7 +41,7 @@ dailyActivity_B <- read_csv(paste0(data_path_B,"dailyActivity_merged.csv"),
 We also have a problem at the intersection of the two date ranges. There are duplicate entries at 2016-04-12 for many Ids. We will remove this date in the first object because the data is supposed to go only to 2016-04-11.
 Aditionally, will remove the intermediate objects, once merged (the rm() function).
 
-```{r merge}
+```{r merge, warning=FALSE}
 dailyActivity_A <- dailyActivity_A %>% filter(ActivityDate < ymd(20160412))
 dailyActivity <- rbind(dailyActivity_A, dailyActivity_B)
 rm(dailyActivity_A)
@@ -68,12 +68,24 @@ Weight info is absent in the 3.11 - 4.11 period too
 ```{r weight info, message=FALSE, warning=FALSE, echo=FALSE}
 weightLogInfo <- read_csv(paste0(data_path_B,"weightLogInfo_merged.csv"),
     col_types = cols(Id = col_character(), 
-        Date = col_datetime(format = "%m/%d/%Y %H:%M:%S %p")))
+        Date = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"),
+        LogId = col_character()))
 ```
 
 ```{r weight info show, message=FALSE, warning=FALSE}
 skim_without_charts(weightLogInfo)
 ```
+
+Only 8 distinct users have any weight info. There are only two entries for bodyfat. All weight data are plausible, no one is 0kg or negative weight. The conversion factor is 2.204623 Pound per Kg and it is correct for all. All the logIDs are not unique, though. It seems the LogId is a function of the date and time. When a manual entry is recorded, the tracker enters just the date and when two users enter a manual record at the same time, they get the exact same LogId. It is not a problem because there are no (LogId, Id) duplicates.
+
+```{r weight cleaning}
+get_dupes(weightLogInfo)
+
+weightLogInfo %>% group_by(Id) %>% summarise(sd_kg = sd(WeightKg))
+```
+
+The estandard deviations can only be calculated for whomever entered 3 records or more. No one had wild fluctuations that indicated an error.
+
 ### Hourly data
 
 ```{r hourly loading, warning=FALSE, echo=FALSE}
@@ -159,6 +171,7 @@ rm(minuteIntensitiesA, minuteIntensitiesB)
 
 ```{r minute skim, message=FALSE, warning=FALSE}
 minuteActivity <- inner_join(minuteCalories, minuteIntensities, by = c("Id","ActivityMinute")) %>% inner_join(minuteSteps, by = c("Id", "ActivityMinute"))
+minuteActivity <- distinct(minuteActivity)
 skim_without_charts(minuteActivity)
 ```
 
@@ -170,6 +183,7 @@ heartrate_seconds_A <- read_csv(paste0(data_path_A,"heartrate_seconds_merged.csv
 heartrate_seconds_B <- read_csv(paste0(data_path_B,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
 ## Splitting the date time column into date and time
 heartrate_seconds <- rbind(heartrate_seconds_A, heartrate_seconds_B)
+heartrate_seconds <- distinct(heartrate_seconds)
 rm(heartrate_seconds_A)
 rm(heartrate_seconds_B)
 ```
@@ -177,11 +191,14 @@ rm(heartrate_seconds_B)
 ```{r show heart rate, warning=FALSE}
 skim_without_charts(heartrate_seconds)
 ```
+
+Heart rates are quite plausible, the minimum is 36, so no one is dead. The maximum is 200, which is high, but it is alright. The median is 74, which is a normal heart beat.
+
 ## Data validation and cleaning
 
 #### Checking Ids
 
-Checking the he skim without charts tables shows that no Id data is missing for any row, and that all have 10 characters. Next, I want to make sure that there are no misspelings such that an Id in a dataset has no correspondance to another. First, we will take the 35 unique Ids in the `dailyActivity` table as our reference. Then, we will use set union or set equality to check that there are no extra Ids in the other datasets.
+Checking the skim without charts tables shows that no Id data is missing for any row, and that all have 10 characters. Next, I want to make sure that there are no misspelings such that an Id in a dataset has no correspondance to another. First, we will take the 35 unique Ids in the `dailyActivity` table as our reference. Then, we will use set union or set equality to check that there are no extra Ids in the other datasets.
 
 ```{r Id check}
 uniqueIds <- unique(dailyActivity$Id)
@@ -201,8 +218,8 @@ union(uniqueIds, unique(sleepDay$Id)) %>% length
 ```
 TRUE for set equal means the set of Ids are identical. For the incomplete data sets heart rate, weight and sleep, we know some Ids are missing. In these cases we do set union, which would give a list longer than 35 if the Ids from those data sets were not completely included in the reference.
 
-### Checking dates
-We know that dates are correct because of how we imported them with readr. If any data had not been recognized, they would have shown as missing values in the skim without charts tables. What I am interested is in the range of dates we have. We will use the geom tile as a nice way to plot each day with its calorie expenditure value. 
+### Checking dates and cleaning
+We know that dates are correct because of how we imported them with *readr*. If any data had not been recognized, they would have shown as missing values in the skim without charts tables. What I am interested is in the range of dates we have. We will use ggplot2::geom_tile as a nice way to plot each day with its calorie expenditure value. 
 
 ```{r calendar plot of activity, echo = FALSE}
 ggplot(dailyActivity, aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = Calories)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Daily calorie expenditure by user throught the study period")
@@ -211,10 +228,15 @@ ggplot(dailyActivity, aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = Calo
 I love this graph because it immediately tells a lot of info: why it was decided to cut the original kaggle data set from april 12, which users have gaps, and suspicious days of very low calorie expenditure. It is a sort of conditional formatting for the data. 
 I prefer to keep all available dates for now, because there is no need for the data to be exactly simultaneous.
 
-Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. We also check there is only one record per date per Id. Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a date.
+Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. We also check there is only one record per date per Id. Conversely, we filter out any record with fewer than 15 SedentaryMinutes. It is hard to think of someone who had no rest at all during the day.
+Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a date.
 
 ```{r filter daily zero cal}
+#filter zero calorie expenditure
 dailyActivity <- dailyActivity %>% filter(Calories > 1)
+
+#filter less than 15 sedentary minutes
+dailyActivity <- dailyActivity %>% filter(SedentaryMinutes > 15)
 
 #Check that there are no Id, Date duplicate records
 get_dupes(dailyActivity, Id, ActivityDate)
@@ -223,8 +245,10 @@ get_dupes(dailyActivity, Id, ActivityDate)
 dailyActivity %>% mutate(totalMinutes = VeryActiveMinutes + FairlyActiveMinutes + LightlyActiveMinutes + SedentaryMinutes) %>% filter(totalMinutes > 24 * 60)
 ```
 
+
+
 #### Sleep data
-Sleep data is very irregular and it is not clear why. There is also a tendency for the users with very few days to have too little or too much sleep. I will not filter out these users because there is also information of how they use the device, so it is useful. It has to be kept in mind when analyzing the sleep durations, though. The number of minutes sleeping in general seems plausible.
+Sleep data is very irregular and it is not clear why. There is also a tendency for the users with very few days to have too little or too much sleep. I will not filter out these users because there is also information of how often they use the device for tracking their sleep, so it is useful. It has to be kept in mind when analyzing the sleep durations, though. The number of minutes sleeping in general seems plausible.
 
 ```{r plotting sleep data, echo=FALSE}
 ggplot(sleepDay, aes(x = SleepDay, y = Id)) + geom_tile(aes(fill = TotalMinutesAsleep)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Sleep", subtitle = "Daily minutes spent asleep by user")
@@ -244,25 +268,44 @@ sleepDay %>% filter(TotalMinutesAsleep >= 1440, TotalTimeInBed >= 1440)
 
 Checking for duplicates of Id/hour combination. Interestingly, there are no hours with zero calories, which is perplexing given that I thought the daily activity file was just a summary from this one.
 
-```{r}
+```{r hourly check, warning=FALSE}
 hourlyActivity %>% get_dupes(Id, ActivityHour)
 #zero calory hours
 filter(hourlyActivity, Calories == 0)
 # days with more than 24 hours. Not really needed, only possible if get_dupes had returned something
-hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% summarise(number_of_hours = n()) %>% filter(number_of_hours > 24)
+hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% 
+    group_by(Id, Day) %>%
+    summarise(number_of_hours = n()) %>% 
+    filter(number_of_hours > 24)
 ```
 
 We will not graph all the hours, instead we will group by day.
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
-hourly2dailyActivity <- hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% summarise(number_of_hours = n(), DCalories = sum(Calories), DStep = sum(StepTotal)) 
+hourly2dailyActivity <- hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>%
+    summarise(number_of_hours = n(), DCalories = sum(Calories), DStep = sum(StepTotal))
 
 hourly2dailyActivity %>% ggplot(aes(x = Day, y = Id)) + geom_tile(aes(fill = DCalories)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Hourly calorie expenditure by user summarised by date")
 ```
 
-This is really baffling. There is Calories data for almost all users for the first half of the study, the data is collected for 24 hours except on the last days. This data is missing in the DailyActivity (compare with the previous graphs). This might be due to the lack of Distance data for the relevant dates. Nevertheless, it could be useful to use this aggregated data if we only want to look at Calories or steps. Lastly, we might consider getting rid of Id "2891001357" with too few data points, but we will wait until we check the minute-level data.
+This is really baffling. There is Calories data for almost all users for the first half of the study, the data is collected for 24 hours except on the last days. This data is missing in the DailyActivity (compare with the previous graphs). This might be due to the lack of Distance data for the relevant dates. Nevertheless, it could be useful to use this aggregated data if we only want to look at Calories or steps. Lastly, we might consider getting rid of Id "2891001357" with too few data points.
 
-Next, we will compare this aggregated data set with the existing dailyActivity data frame. We use a left join to keep only the dates that exist in the original dailyActivity.
+Now we look at the mean intensity throught the 24 hour window.
+
+```{r}
+hourlyActivity %>% mutate(hour_of_day = hour(ActivityHour)) %>% group_by(Id,hour_of_day) %>% summarise(MeanIntensity = mean(TotalIntensity)) %>% ggplot(aes(x = hour_of_day, y = Id)) + geom_tile(aes(fill = MeanIntensity)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Mean Hourly Intensity", subtitle = "Mean intensity by hour of the day")
+```
+
+This makes me more secure to filter our the Id "2891001357" that has very few days and those days are incomplete.
+
+```{r filter incomplete user}
+dailyActivity <- dailyActivity %>%  filter(Id != "2891001357")
+hourly2dailyActivity <- hourly2dailyActivity %>%  filter(Id != "2891001357")
+hourlyActivity <- hourlyActivity %>%  filter(Id != "2891001357")
+minuteActivity <- minuteActivity  %>%  filter(Id != "2891001357")
+```
+
+Next, we will compare the hour aggregated data set with the existing dailyActivity data frame. We use a left join to keep only the dates that exist in the original dailyActivity.
 
 ```{r, echo=FALSE}
 left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories, diffSteps = TotalSteps - DStep, number_of_hours) %>% ggplot(aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = diffCal)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie error", subtitle = "Difference between daily and hourly aggregated data per user per day")
@@ -288,7 +331,7 @@ This motivates me to explore the relationships in the dailyActivity data to unde
 dailyActivity %>% ggplot() + geom_point(aes(x = TotalSteps, y = TotalDistance)) + theme_bw() + labs(title = "The Total distance is calculated from Steps", subtitle = "Daily Total steps have a linear relationship with distance")
 ```
 
-We can sum the active distances from different excercise intensities (ACtive, moderate, Light and Sendentary) and check their relationship with the total distance.
+We can sum the active distances from different excercise intensities (Active, Moderate, Light and Sedentary) and check their relationship with the total distance.
 
 ```{r}
 dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance)  %>%  ggplot() + geom_point(aes(x = ActiveDistances, y = TotalDistance)) + theme_bw() + labs(title = "Sum of active distances vs Total Distance", subtitle = "The distances roughly coincide")
@@ -299,9 +342,9 @@ We see that the graph is completely linear and that the sum of the distances is 
 ```{r filter divergent distances}
 dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-ActiveDistances)
 ```
-I do not show this but this filter has the advantage of dropping more of the highly divergent data from the hourly data we saw above (see graph Daily Calorie Error), mostly for the user "402033". This gives me more confidence that dropping these data is correct.
+I do not show this but this filter has the advantage of dropping more of the highly divergent data from the hourly data we saw above (see graph Daily Calorie Error), mostly for the user "402033...". This gives me more confidence that dropping these data is correct.
 
-#### Velocities
+#### No distance without time
 
 I want to do a further sanity check on the Active columns. I want to check that there are no instances where VeryActiveDistance of 0 corresponds to a non-zero VeryActiveMinutes, which would be inconsistent. For this, we can use the xor function. Xor() will return FALSE if the data is correct, that is if both values are non-zero, or if both are zero, any discrepancy will result in a TRUE value. Of course, it is possible to have 0 distance with positive minutes, by working out in a stationary bike, for example, so we further filter to get only the rows where the time is zero but the distance is non-zero.
 
@@ -319,7 +362,62 @@ filter_vector <- xor(dailyActivity$SedentaryActiveDistance, dailyActivity$Sedent
 filter(dailyActivity, filter_vector, SedentaryMinutes == 0)
 ```
 
-Our data is consistent, at least in this way. Being sure of this, now I want to know the average velocity of people in the different categories. Multiplication by 60 is done to transform minutes to km/hour
+Our data is consistent in this way. There is no distance that is traveled in zero time, which would be impossible.
+
+#### Cleaning minute data and comparisons with above levels
+
+```{r minute2hour, message=FALSE, warning=FALSE}
+minute2hour <- minuteActivity %>% mutate(ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute))) %>% select(-ActivityMinute) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), TotalIntensity = sum(Intensity), AverageIntensity = mean(Intensity), StepTotal = sum(Steps),  n_minutes = n())
+
+minute2hour %>% filter(n_minutes != 60)
+
+### Compare with hourly data
+left_join(hourlyActivity, minute2hour, by = join_by(Id, ActivityHour)) %>% drop_na() %>%
+    transmute(Id, ActivityHour, diffCal = Calories.x - Calories.y,
+              diffAvgInt = AverageIntensity.x - AverageIntensity.y,
+              diffStep = StepTotal.x - StepTotal.y, 
+              diffTotInt = TotalIntensity.x - TotalIntensity.y) %>% filter(diffCal > 0 | diffAvgInt > 0 | diffStep > 0)
+
+setdiff(select(hourlyActivity, Id, ActivityHour),
+        select(minute2hour, Id, ActivityHour))
+```
+
+The aggregated minute data is basically identical to the hour data, except for 6 rows that are present in the hourly data. They are from the last day of the data range.
+
+### Hear rate data cleaning
+
+No duplicates
+
+```{r}
+get_dupes(heartrate_seconds)
+```
+
+```{r heart rate measurements by day, echo=FALSE, message=FALSE, warning=FALSE}
+heartrate_seconds %>% mutate(heart_date = date(Time)) %>% group_by(Id, heart_date) %>% summarise(n_records = n()) %>% ggplot(aes(x = heart_date, y = Id)) + geom_tile(aes(fill = n_records)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Number of heart rate records", subtitle = "Number of heart rate records by day by user", x = "Date")
+```
+
+The heart rate records are very spotty. They also vary a lot in terms of the number per day, and even in the time resolution.
+
+```{r hear rate hour, echo=FALSE, message=FALSE, warning=FALSE}
+heartrate_seconds %>% mutate(heart_hour = hour(Time)) %>% group_by(Id, heart_hour) %>% summarise(mean_rate = mean(Value)) %>% ggplot(aes(x = heart_hour, y = Id)) + geom_tile(aes(fill = mean_rate)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Mean hourly heart rate", subtitle = "Mean heart rate by user by hour of day", x = "Hour of day")
+```
+
+The heart rate data can be useful to explore the usage and exercise habits for a subset of users.
+
+## Plotting a few explorations
+
+What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+
+```{r}
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
+```
+
+What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+
+```{r}
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
+```
+
 
 ```{r velocities, echo=FALSE, warning=FALSE}
 dailyActivity %>% mutate(HighVelocity = 60 * VeryActiveDistance/VeryActiveMinutes,  ModerateVelocity = 60 * ModeratelyActiveDistance/FairlyActiveMinutes, LightVelocity = 60 *  LightActiveDistance/LightlyActiveMinutes, SedentaryVelocity = 60 * SedentaryActiveDistance/SedentaryMinutes) %>% 
@@ -330,21 +428,6 @@ dailyActivity %>% mutate(HighVelocity = 60 * VeryActiveDistance/VeryActiveMinute
 ```
 
 This is at the same time a sanity check (no one is travelling at 100 km/h, no sedentary velocity is significantly above 0) and an overview of the kind of activities people are doing. A few jog. Most walk (or swim?). The zero velocities in all categories apart from sedentary are probably people on a treadmill or stationary bike, or lifting weights. Lower than average velocities could be people hiking, swimming or going upstairs: intense activities that do not cover much distance.
-
-
-## Plotting a few explorations
-
-What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
-
-```{r}
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
-```
-
-What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
-
-```{r}
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
-```
 
 What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
 

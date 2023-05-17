@@ -36,9 +36,6 @@ rm(dailyActivity_B)
 skim_without_charts(dailyActivity)
 ```
 
-    ## Warning in kable_pipe(x = structure(c("Name", "Number of rows", "Number of
-    ## columns", : The table should have a header (column names)
-
 |                                                  |               |
 |:-------------------------------------------------|:--------------|
 | Name                                             | dailyActivity |
@@ -152,9 +149,9 @@ skim_without_charts(weightLogInfo)
 | Number of columns                                | 8             |
 | \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |               |
 | Column type frequency:                           |               |
-| character                                        | 1             |
+| character                                        | 2             |
 | logical                                          | 1             |
-| numeric                                          | 5             |
+| numeric                                          | 4             |
 | POSIXct                                          | 1             |
 | \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ |               |
 | Group variables                                  | None          |
@@ -166,6 +163,7 @@ Data summary
 | skim_variable | n_missing | complete_rate | min | max | empty | n_unique | whitespace |
 |:--------------|----------:|--------------:|----:|----:|------:|---------:|-----------:|
 | Id            |         0 |             1 |  10 |  10 |     0 |        8 |          0 |
+| LogId         |         0 |             1 |  13 |  13 |     0 |       56 |          0 |
 
 **Variable type: logical**
 
@@ -175,19 +173,59 @@ Data summary
 
 **Variable type: numeric**
 
-| skim_variable | n_missing | complete_rate |         mean |            sd |           p0 |          p25 |          p50 |          p75 |         p100 |
-|:--------------|----------:|--------------:|-------------:|--------------:|-------------:|-------------:|-------------:|-------------:|-------------:|
-| WeightKg      |         0 |          1.00 | 7.204000e+01 |         13.92 | 5.260000e+01 | 6.140000e+01 | 6.250000e+01 | 8.505000e+01 | 1.335000e+02 |
-| WeightPounds  |         0 |          1.00 | 1.588100e+02 |         30.70 | 1.159600e+02 | 1.353600e+02 | 1.377900e+02 | 1.875000e+02 | 2.943200e+02 |
-| Fat           |        65 |          0.03 | 2.350000e+01 |          2.12 | 2.200000e+01 | 2.275000e+01 | 2.350000e+01 | 2.425000e+01 | 2.500000e+01 |
-| BMI           |         0 |          1.00 | 2.519000e+01 |          3.07 | 2.145000e+01 | 2.396000e+01 | 2.439000e+01 | 2.556000e+01 | 4.754000e+01 |
-| LogId         |         0 |          1.00 | 1.461772e+12 | 782994783\.61 | 1.460444e+12 | 1.461079e+12 | 1.461802e+12 | 1.462375e+12 | 1.463098e+12 |
+| skim_variable | n_missing | complete_rate |   mean |    sd |     p0 |    p25 |    p50 |    p75 |   p100 |
+|:--------------|----------:|--------------:|-------:|------:|-------:|-------:|-------:|-------:|-------:|
+| WeightKg      |         0 |          1.00 |  72.04 | 13.92 |  52.60 |  61.40 |  62.50 |  85.05 | 133.50 |
+| WeightPounds  |         0 |          1.00 | 158.81 | 30.70 | 115.96 | 135.36 | 137.79 | 187.50 | 294.32 |
+| Fat           |        65 |          0.03 |  23.50 |  2.12 |  22.00 |  22.75 |  23.50 |  24.25 |  25.00 |
+| BMI           |         0 |          1.00 |  25.19 |  3.07 |  21.45 |  23.96 |  24.39 |  25.56 |  47.54 |
 
 **Variable type: POSIXct**
 
 | skim_variable | n_missing | complete_rate | min                 | max                 | median              | n_unique |
 |:--------------|----------:|--------------:|:--------------------|:--------------------|:--------------------|---------:|
 | Date          |         0 |             1 | 2016-04-12 06:47:11 | 2016-05-12 23:59:59 | 2016-04-27 23:59:59 |       56 |
+
+Only 8 distinct users have any weight info. There are only two entries
+for bodyfat. All weight data are plausible, no one is 0kg or negative
+weight. The conversion factor is 2.204623 Pound per Kg and it is correct
+for all. All the logIDs are not unique, though. It seems the LogId is a
+function of the date and time. When a manual entry is recorded, the
+tracker enters just the date and when two users enter a manual record at
+the same time, they get the exact same LogId. It is not a problem
+because there are no (LogId, Id) duplicates.
+
+``` r
+get_dupes(weightLogInfo)
+```
+
+    ## No variable names specified - using all columns.
+
+    ## No duplicate combinations found of: Id, Date, WeightKg, WeightPounds, Fat, BMI, IsManualReport, LogId
+
+    ## # A tibble: 0 x 9
+    ## # ... with 9 variables: Id <chr>, Date <dttm>, WeightKg <dbl>,
+    ## #   WeightPounds <dbl>, Fat <dbl>, BMI <dbl>, IsManualReport <lgl>,
+    ## #   LogId <chr>, dupe_count <int>
+
+``` r
+weightLogInfo %>% group_by(Id) %>% summarise(sd_kg = sd(WeightKg))
+```
+
+    ## # A tibble: 8 x 2
+    ##   Id           sd_kg
+    ##   <chr>        <dbl>
+    ## 1 1503960366  0     
+    ## 2 1927972279 NA     
+    ## 3 2873212765  0.424 
+    ## 4 4319703577  0.0707
+    ## 5 4558609924  0.498 
+    ## 6 5577150313 NA     
+    ## 7 6962181067  0.388 
+    ## 8 8877689391  0.455
+
+The estandard deviations can only be calculated for whomever entered 3
+records or more. No one had wild fluctuations that indicated an error.
 
 ### Hourly data
 
@@ -237,13 +275,14 @@ I will only check the narrow minute files.
 
 ``` r
 minuteActivity <- inner_join(minuteCalories, minuteIntensities, by = c("Id","ActivityMinute")) %>% inner_join(minuteSteps, by = c("Id", "ActivityMinute"))
+minuteActivity <- distinct(minuteActivity)
 skim_without_charts(minuteActivity)
 ```
 
 |                                                  |                |
 |:-------------------------------------------------|:---------------|
 | Name                                             | minuteActivity |
-| Number of rows                                   | 2833620        |
+| Number of rows                                   | 2760120        |
 | Number of columns                                | 5              |
 | \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |                |
 | Column type frequency:                           |                |
@@ -265,15 +304,15 @@ Data summary
 
 | skim_variable | n_missing | complete_rate | mean |    sd |  p0 |  p25 |  p50 |  p75 |   p100 |
 |:--------------|----------:|--------------:|-----:|------:|----:|-----:|-----:|-----:|-------:|
-| Calories      |         0 |             1 | 1.59 |  1.38 |   0 | 0.94 | 1.22 | 1.43 |  23.01 |
+| Calories      |         0 |             1 | 1.60 |  1.39 |   0 | 0.94 | 1.22 | 1.43 |  23.01 |
 | Intensity     |         0 |             1 | 0.19 |  0.51 |   0 | 0.00 | 0.00 | 0.00 |   3.00 |
-| Steps         |         0 |             1 | 5.00 | 17.62 |   0 | 0.00 | 0.00 | 0.00 | 220.00 |
+| Steps         |         0 |             1 | 5.05 | 17.67 |   0 | 0.00 | 0.00 | 0.00 | 220.00 |
 
 **Variable type: POSIXct**
 
 | skim_variable  | n_missing | complete_rate | min        | max                 | median              | n_unique |
 |:---------------|----------:|--------------:|:-----------|:--------------------|:--------------------|---------:|
-| ActivityMinute |         0 |             1 | 2016-03-12 | 2016-05-12 15:59:00 | 2016-04-11 11:16:00 |    88800 |
+| ActivityMinute |         0 |             1 | 2016-03-12 | 2016-05-12 15:59:00 | 2016-04-10 10:53:00 |    88800 |
 
 ### Heart rate data
 
@@ -284,7 +323,7 @@ skim_without_charts(heartrate_seconds)
 |                                                  |                   |
 |:-------------------------------------------------|:------------------|
 | Name                                             | heartrate_seconds |
-| Number of rows                                   | 3638339           |
+| Number of rows                                   | 3614915           |
 | Number of columns                                | 3                 |
 | \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_   |                   |
 | Column type frequency:                           |                   |
@@ -304,27 +343,30 @@ Data summary
 
 **Variable type: numeric**
 
-| skim_variable | n_missing | complete_rate | mean |    sd |  p0 | p25 | p50 | p75 | p100 |
-|:--------------|----------:|--------------:|-----:|------:|----:|----:|----:|----:|-----:|
-| Value         |         0 |             1 | 78.1 | 19.23 |  36 |  64 |  74 |  88 |  203 |
+| skim_variable | n_missing | complete_rate |  mean |    sd |  p0 | p25 | p50 | p75 | p100 |
+|:--------------|----------:|--------------:|------:|------:|----:|----:|----:|----:|-----:|
+| Value         |         0 |             1 | 78.14 | 19.22 |  36 |  64 |  74 |  89 |  203 |
 
 **Variable type: POSIXct**
 
 | skim_variable | n_missing | complete_rate | min                 | max                 | median              | n_unique |
 |:--------------|----------:|--------------:|:--------------------|:--------------------|:--------------------|---------:|
-| Time          |         0 |             1 | 2016-03-29 00:00:05 | 2016-05-12 16:20:00 | 2016-04-19 17:30:00 |  1456216 |
+| Time          |         0 |             1 | 2016-03-29 00:00:05 | 2016-05-12 16:20:00 | 2016-04-19 20:25:20 |  1456216 |
+
+Heart rates are quite plausible, the minimum is 36, so no one is dead.
+The maximum is 200, which is high, but it is alright. The median is 74,
+which is a normal heart beat.
 
 ## Data validation and cleaning
 
 #### Checking Ids
 
-Checking the he skim without charts tables shows that no Id data is
-missing for any row, and that all have 10 characters. Next, I want to
-make sure that there are no misspelings such that an Id in a dataset has
-no correspondance to another. First, we will take the 35 unique Ids in
-the `dailyActivity` table as our reference. Then, we will use set union
-or set equality to check that there are no extra Ids in the other
-datasets.
+Checking the skim without charts tables shows that no Id data is missing
+for any row, and that all have 10 characters. Next, I want to make sure
+that there are no misspelings such that an Id in a dataset has no
+correspondance to another. First, we will take the 35 unique Ids in the
+`dailyActivity` table as our reference. Then, we will use set union or
+set equality to check that there are no extra Ids in the other datasets.
 
 ``` r
 uniqueIds <- unique(dailyActivity$Id)
@@ -370,13 +412,13 @@ missing. In these cases we do set union, which would give a list longer
 than 35 if the Ids from those data sets were not completely included in
 the reference.
 
-### Checking dates
+### Checking dates and cleaning
 
 We know that dates are correct because of how we imported them with
-readr. If any data had not been recognized, they would have shown as
+*readr*. If any data had not been recognized, they would have shown as
 missing values in the skim without charts tables. What I am interested
-is in the range of dates we have. We will use the geom tile as a nice
-way to plot each day with its calorie expenditure value.
+is in the range of dates we have. We will use ggplot2::geom_tile as a
+nice way to plot each day with its calorie expenditure value.
 
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/calendar%20plot%20of%20activity-1.png)<!-- -->
 
@@ -389,13 +431,19 @@ exactly simultaneous.
 
 Nevertheless, I will cut out the 9 days of **zero** calorie expenditure,
 since that is physically very unlikely and indicates an artifact. We
-also check there is only one record per date per Id. Our final sanity
+also check there is only one record per date per Id. Conversely, we
+filter out any record with fewer than 15 SedentaryMinutes. It is hard to
+think of someone who had no rest at all during the day. Our final sanity
 check for this data set is to sum the total number of minutes of all
 activity types, and check that it is not greater than 1440, which is the
 total number of minutes in a date.
 
 ``` r
+#filter zero calorie expenditure
 dailyActivity <- dailyActivity %>% filter(Calories > 1)
+
+#filter less than 15 sedentary minutes
+dailyActivity <- dailyActivity %>% filter(SedentaryMinutes > 15)
 
 #Check that there are no Id, Date duplicate records
 get_dupes(dailyActivity, Id, ActivityDate)
@@ -431,9 +479,10 @@ dailyActivity %>% mutate(totalMinutes = VeryActiveMinutes + FairlyActiveMinutes 
 Sleep data is very irregular and it is not clear why. There is also a
 tendency for the users with very few days to have too little or too much
 sleep. I will not filter out these users because there is also
-information of how they use the device, so it is useful. It has to be
-kept in mind when analyzing the sleep durations, though. The number of
-minutes sleeping in general seems plausible.
+information of how often they use the device for tracking their sleep,
+so it is useful. It has to be kept in mind when analyzing the sleep
+durations, though. The number of minutes sleeping in general seems
+plausible.
 
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/plotting%20sleep%20data-1.png)<!-- -->
 
@@ -495,7 +544,10 @@ filter(hourlyActivity, Calories == 0)
 
 ``` r
 # days with more than 24 hours. Not really needed, only possible if get_dupes had returned something
-hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% summarise(number_of_hours = n()) %>% filter(number_of_hours > 24)
+hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% 
+    group_by(Id, Day) %>%
+    summarise(number_of_hours = n()) %>% 
+    filter(number_of_hours > 24)
 ```
 
     ## `summarise()` has grouped output by 'Id'. You can override using the `.groups`
@@ -507,7 +559,7 @@ hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% su
 
 We will not graph all the hours, instead we will group by day.
 
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-1-1.png)<!-- -->
 
 This is really baffling. There is Calories data for almost all users for
 the first half of the study, the data is collected for 24 hours except
@@ -516,9 +568,30 @@ with the previous graphs). This might be due to the lack of Distance
 data for the relevant dates. Nevertheless, it could be useful to use
 this aggregated data if we only want to look at Calories or steps.
 Lastly, we might consider getting rid of Id “2891001357” with too few
-data points, but we will wait until we check the minute-level data.
+data points.
 
-Next, we will compare this aggregated data set with the existing
+Now we look at the mean intensity throught the 24 hour window.
+
+``` r
+hourlyActivity %>% mutate(hour_of_day = hour(ActivityHour)) %>% group_by(Id,hour_of_day) %>% summarise(MeanIntensity = mean(TotalIntensity)) %>% ggplot(aes(x = hour_of_day, y = Id)) + geom_tile(aes(fill = MeanIntensity)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Mean Hourly Intensity", subtitle = "Mean intensity by hour of the day")
+```
+
+    ## `summarise()` has grouped output by 'Id'. You can override using the `.groups`
+    ## argument.
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
+This makes me more secure to filter our the Id “2891001357” that has
+very few days and those days are incomplete.
+
+``` r
+dailyActivity <- dailyActivity %>%  filter(Id != "2891001357")
+hourly2dailyActivity <- hourly2dailyActivity %>%  filter(Id != "2891001357")
+hourlyActivity <- hourlyActivity %>%  filter(Id != "2891001357")
+minuteActivity <- minuteActivity  %>%  filter(Id != "2891001357")
+```
+
+Next, we will compare the hour aggregated data set with the existing
 dailyActivity data frame. We use a left join to keep only the dates that
 exist in the original dailyActivity.
 
@@ -570,7 +643,7 @@ tracked distance, which comes from GPS.
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/steps%20and%20distance-1.png)<!-- -->
 
 We can sum the active distances from different excercise intensities
-(ACtive, moderate, Light and Sendentary) and check their relationship
+(Active, Moderate, Light and Sedentary) and check their relationship
 with the total distance.
 
 ``` r
@@ -595,10 +668,10 @@ dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance +
 
 I do not show this but this filter has the advantage of dropping more of
 the highly divergent data from the hourly data we saw above (see graph
-Daily Calorie Error), mostly for the user “402033”. This gives me more
+Daily Calorie Error), mostly for the user “402033…”. This gives me more
 confidence that dropping these data is correct.
 
-#### Velocities
+#### No distance without time
 
 I want to do a further sanity check on the Active columns. I want to
 check that there are no instances where VeryActiveDistance of 0
@@ -666,9 +739,111 @@ filter(dailyActivity, filter_vector, SedentaryMinutes == 0)
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
     ## #   differencia <dbl>
 
-Our data is consistent, at least in this way. Being sure of this, now I
-want to know the average velocity of people in the different categories.
-Multiplication by 60 is done to transform minutes to km/hour
+Our data is consistent in this way. There is no distance that is
+traveled in zero time, which would be impossible.
+
+#### Cleaning minute data and comparisons with above levels
+
+``` r
+minute2hour <- minuteActivity %>% mutate(ActivityHour = date(ActivityMinute) + hours(hour(ActivityMinute))) %>% select(-ActivityMinute) %>% group_by(Id, ActivityHour) %>% summarise(Calories = round(sum(Calories)), TotalIntensity = sum(Intensity), AverageIntensity = mean(Intensity), StepTotal = sum(Steps),  n_minutes = n())
+
+minute2hour %>% filter(n_minutes != 60)
+```
+
+    ## # A tibble: 0 x 7
+    ## # Groups:   Id [0]
+    ## # ... with 7 variables: Id <chr>, ActivityHour <dttm>, Calories <dbl>,
+    ## #   TotalIntensity <dbl>, AverageIntensity <dbl>, StepTotal <dbl>,
+    ## #   n_minutes <int>
+
+``` r
+### Compare with hourly data
+left_join(hourlyActivity, minute2hour, by = join_by(Id, ActivityHour)) %>% drop_na() %>%
+    transmute(Id, ActivityHour, diffCal = Calories.x - Calories.y,
+              diffAvgInt = AverageIntensity.x - AverageIntensity.y,
+              diffStep = StepTotal.x - StepTotal.y, 
+              diffTotInt = TotalIntensity.x - TotalIntensity.y) %>% filter(diffCal > 0 | diffAvgInt > 0 | diffStep > 0)
+```
+
+    ## # A tibble: 9,513 x 6
+    ##    Id         ActivityHour        diffCal  diffAvgInt diffStep diffTotInt
+    ##    <chr>      <dttm>                <dbl>       <dbl>    <dbl>      <dbl>
+    ##  1 1503960366 2016-03-12 09:00:00       0 0.000000333        0          0
+    ##  2 1503960366 2016-03-12 11:00:00       0 0.000000333        0          0
+    ##  3 1503960366 2016-03-12 14:00:00       0 0.000000333        0          0
+    ##  4 1503960366 2016-03-12 20:00:00       0 0.000000333        0          0
+    ##  5 1503960366 2016-03-13 02:00:00       0 0.000000333        0          0
+    ##  6 1503960366 2016-03-13 08:00:00       0 0.000000333        0          0
+    ##  7 1503960366 2016-03-13 10:00:00       0 0.000000333        0          0
+    ##  8 1503960366 2016-03-13 11:00:00       0 0.000000333        0          0
+    ##  9 1503960366 2016-03-13 16:00:00       0 0.000000333        0          0
+    ## 10 1503960366 2016-03-13 20:00:00       0 0.000000333        0          0
+    ## # ... with 9,503 more rows
+
+``` r
+setdiff(select(hourlyActivity, Id, ActivityHour),
+        select(minute2hour, Id, ActivityHour))
+```
+
+    ## # A tibble: 6 x 2
+    ##   Id         ActivityHour       
+    ##   <chr>      <dttm>             
+    ## 1 2022484408 2016-05-12 15:00:00
+    ## 2 4445114986 2016-05-12 13:00:00
+    ## 3 4445114986 2016-05-12 14:00:00
+    ## 4 8378563200 2016-05-12 13:00:00
+    ## 5 8378563200 2016-05-12 14:00:00
+    ## 6 8877689391 2016-05-12 14:00:00
+
+The aggregated minute data is basically identical to the hour data,
+except for 6 rows that are present in the hourly data. They are from the
+last day of the data range.
+
+### Hear rate data cleaning
+
+No duplicates
+
+``` r
+get_dupes(heartrate_seconds)
+```
+
+    ## No variable names specified - using all columns.
+
+    ## No duplicate combinations found of: Id, Time, Value
+
+    ## # A tibble: 0 x 4
+    ## # ... with 4 variables: Id <chr>, Time <dttm>, Value <dbl>, dupe_count <int>
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/heart%20rate%20measurements%20by%20day-1.png)<!-- -->
+
+The heart rate records are very spotty. They also vary a lot in terms of
+the number per day, and even in the time resolution.
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/hear%20rate%20hour-1.png)<!-- -->
+
+The heart rate data can be useful to explore the usage and excercise
+habits for a subset of users. \## Plotting a few explorations
+
+What’s the relationship between steps taken in a day and sedentary
+minutes? How could this help inform the customer segments that we can
+market to? E.g. position this more as a way to get started in walking
+more? Or to measure steps that you’re already taking?
+
+``` r
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
+```
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+What’s the relationship between minutes asleep and time in bed? You
+might expect it to be almost completely linear - are there any
+unexpected trends?
+
+``` r
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
+```
+
+![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/velocities-1.png)<!-- -->
 
@@ -679,29 +854,6 @@ swim?). The zero velocities in all categories apart from sedentary are
 probably people on a treadmill or stationary bike, or lifting weights.
 Lower than average velocities could be people hiking, swimming or going
 upstairs: intense activities that do not cover much distance.
-
-## Plotting a few explorations
-
-What’s the relationship between steps taken in a day and sedentary
-minutes? How could this help inform the customer segments that we can
-market to? E.g. position this more as a way to get started in walking
-more? Or to measure steps that you’re already taking?
-
-``` r
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
-```
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
-What’s the relationship between minutes asleep and time in bed? You
-might expect it to be almost completely linear - are there any
-unexpected trends?
-
-``` r
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
-```
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 What could these trends tell you about how to help market this product?
 Or areas where you might want to explore further?
