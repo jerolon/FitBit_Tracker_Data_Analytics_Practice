@@ -13,6 +13,7 @@ library(dplyr)
 library(lubridate)
 library(stringr)
 library(tidyr)
+library(janitor)
 library(ggplot2)
 ```
 
@@ -23,7 +24,7 @@ setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 ## Data Loading
 
-I will load the corresponding files from both folders and merge them using rbind. I will only show the code for loading and merging for dailyActivity, because it is repetitive, but will show the summaries and cleaning for all. In any case, the code is still in the .Rmd file. Aditionally, will remove the intermediate objects, once merged (the rm() function).
+I will load the corresponding files from both folders and merge them using rbind. I will only show the code for loading and merging for dailyActivity, because it is repetitive, but will show the summaries and cleaning for all. In any case, the code is still in the .Rmd file. 
 
 ```{r data loading, message=FALSE, warning=FALSE}
 data_path_A <- "../Fitabase Data 3.12.16-4.11.16/"
@@ -36,6 +37,12 @@ dailyActivity_B <- read_csv(paste0(data_path_B,"dailyActivity_merged.csv"),
     col_types = cols(Id = col_character(), 
         ActivityDate = col_date(format = "%m/%d/%Y")))
 
+```
+We also have a problem at the intersection of the two date ranges. There are duplicate entries at 2016-04-12 for many Ids. We will remove this date in the first object because the data is supposed to go only to 2016-04-11.
+Aditionally, will remove the intermediate objects, once merged (the rm() function).
+
+```{r merge}
+dailyActivity_A <- dailyActivity_A %>% filter(ActivityDate < ymd(20160412))
 dailyActivity <- rbind(dailyActivity_A, dailyActivity_B)
 rm(dailyActivity_A)
 rm(dailyActivity_B)
@@ -99,6 +106,9 @@ hourlySteps <- rbind(hourlyStepsA, hourlyStepsB)
 rm(hourlyStepsA); rm(hourlyStepsB)
 
 hourlyActivity <- inner_join(hourlyCalories, hourlyIntensities, by = c("Id","ActivityHour")) %>% inner_join(hourlySteps, by = c("Id", "ActivityHour"))
+
+hourlyActivity <- distinct(hourlyActivity)
+rm(hourlyCalories, hourlyIntensities, hourlySteps)
 ```
 
 ```{r hourly loading show, warning=FALSE}
@@ -144,15 +154,26 @@ minuteIntensities <- rbind(minuteIntensitiesA, minuteIntensitiesB)
 rm(minuteIntensitiesA, minuteIntensitiesB)
 ```
 
-```{r}
+```{r minute skim, message=FALSE, warning=FALSE}
 minuteActivity <- inner_join(minuteCalories, minuteIntensities, by = c("Id","ActivityMinute")) %>% inner_join(minuteSteps, by = c("Id", "ActivityMinute"))
 skim_without_charts(minuteActivity)
 ```
 
+### Heart rate data
 
+```{r load heart rate, warning=FALSE, echo=FALSE}
+heartrate_seconds_A <- read_csv(paste0(data_path_A,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
 
+heartrate_seconds_B <- read_csv(paste0(data_path_B,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
+## Splitting the date time column into date and time
+heartrate_seconds <- rbind(heartrate_seconds_A, heartrate_seconds_B)
+rm(heartrate_seconds_A)
+rm(heartrate_seconds_B)
+```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r show heart rate, warning=FALSE}
+skim_without_charts(heartrate_seconds)
+```
 
 ## Plotting a few explorations
 
@@ -170,15 +191,108 @@ ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point(
 
 What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
 
-## Merging these two datasets together
+## Data validation and cleaning
+
+#### Checking Ids
+
+Checking the he skim without charts tables shows that no Id data is missing for any row, and that all have 10 characters. Next, I want to make sure that there are no misspelings such that an Id in a dataset has no correspondance to another. First, we will take the 35 unique Ids in the `dailyActivity` table as our reference. Then, we will use set union or set equality to check that there are no extra Ids in the other datasets.
+
+```{r Id check}
+uniqueIds <- unique(dailyActivity$Id)
+### Datasets with the full 35 participants
+#Hour data
+setequal(uniqueIds, unique(hourlyActivity$Id))
+#Minute data
+setequal(uniqueIds, unique(minuteActivity$Id))
+
+### Datasets with some participants missing
+#heart rate
+union(uniqueIds, unique(heartrate_seconds$Id)) %>% length
+#weight
+union(uniqueIds, unique(weightLogInfo$Id)) %>% length
+#sleep
+union(uniqueIds, unique(sleepDay$Id)) %>% length
+```
+TRUE for set equal means the set of Ids are identical. For the incomplete data sets heart rate, weight and sleep, we know some Ids are missing. In these cases we do set union, which would give a list longer than 35 if the Ids from those data sets were not completely included in the reference.
+
+### Checking dates
+We know that dates are correct because of how we imported them with readr. If any data had not been recognized, they would have shown as missing values in the skim without charts tables. What I am interested is in the range of dates we have. We will use the geom tile as a nice way to plot each day with its calorie expenditure value. 
+
+```{r calendar plot of activity, echo = FALSE}
+ggplot(dailyActivity, aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = Calories)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Daily calorie expenditure by user throught the study period")
+```
+
+I love this graph because it immediately tells a lot of info: why it was decided to cut the original kaggle dataset from april 12, which users have gaps, and suspicious days of very low calorie expenditure. It is a sort of conditional formatting for the data. 
+I prefer to keep all available dates for now, because there is no need for the data to be exactly simultaneous.
+
+Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. We also check there is only one record per date per Id. Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a date.
+
+```{r filter daily zero cal}
+dailyActivity <- dailyActivity %>% filter(Calories > 1)
+
+#Check that there are no Id, Date duplicate records
+get_dupes(dailyActivity, Id, ActivityDate)
+
+#Check that the sum of minutes does not exceed the total minutes in a day
+dailyActivity %>% mutate(totalMinutes = VeryActiveMinutes + FairlyActiveMinutes + LightlyActiveMinutes + SedentaryMinutes) %>% filter(totalMinutes > 24 * 60)
+```
+
+#### Sleep data
+Sleep data is very irregular and it is not clear why. There is also a tendency for the users with very few days to have too little or too much sleep. I will not filter out these users because there is also information of how they use the device, so it is useful. It has to be kept in mind when analyzing the sleep durations, though. The number of minutes sleeping in general seems plausible.
+
+```{r plotting sleep data, echo=FALSE}
+ggplot(sleepDay, aes(x = SleepDay, y = Id)) + geom_tile(aes(fill = TotalMinutesAsleep)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Daily calorie expenditure by user throught the study period")
+```
+
+The sanity checks are no record Id/SleepDay duplication and that minutes in a day do not exceed $60 * 24 = 1440$, although we have already seen this is not the case in the skim_without_charts summary.
+```{r clean sleep}
+get_dupes(sleepDay, Id, SleepDay)
+##There are duplicate rows
+sleepDay <- distinct(sleepDay)
+
+sleepDay %>% filter(TotalMinutesAsleep >= 1440, TotalTimeInBed >= 1440)
+```
 
 
+#### Checking the date time in the hourly data
 
-Take a look at how many participants are in this data set.
+Checking for duplicates of Id/hour combination. Interestingly, there are no hours with zero calories, which is perplexing given that I thought the daily activity file was just a summary from this one.
 
 ```{r}
-#n_distinct(combined_data$Id)
+hourlyActivity %>% get_dupes(Id, ActivityHour)
+#zero calory hours
+filter(hourlyActivity, Calories == 0)
+# days with more than 24 hours. Not really needed, only possible if get_dupes had returned something
+hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% summarise(number_of_hours = n()) %>% filter(number_of_hours > 24)
 ```
+
+We will not graph all the hours, instead we will group by day.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+hourly2dailyActivity <- hourlyActivity %>% mutate(Day = date(ActivityHour)) %>% group_by(Id, Day) %>% summarise(number_of_hours = n(), DCalories = sum(Calories), DStep = sum(StepTotal)) 
+
+hourly2dailyActivity %>% ggplot(aes(x = Day, y = Id)) + geom_tile(aes(fill = DCalories)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie expenditure", subtitle = "Hourly calorie expenditure by user summarised by date")
+```
+
+This is really baffling. There is Calories data for almost all users for the first half of the study, the data is collected for 24 hours except on the last days. This data is missing in the DailyActivity (compare with the previous graphs). This might be due to the lack of Distance data for the relevant dates. Nevertheless, it could be useful to use this aggregated data if we only want to look at Calories or steps. Lastly, we might consider getting rid of Id "2891001357" with too few data points, but we will wait until we check the minute-level data.
+
+Next, we will compare this aggregated data set with the existing dailyActivity data frame. We use a left join to keep only the dates that exist in the original dailyActivity.
+
+```{r, echo=FALSE}
+left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories, diffSteps = TotalSteps - DStep, number_of_hours) %>% ggplot(aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = diffCal)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Calorie error", subtitle = "Difference between daily and hourly aggregated data per user per day")
+```
+
+Most days coincide, some error could be expected due to aggregation issues or rounding. But what about the substantial divergences? I am tempted to delete the outliers, but I will wait until the minute-level comparison. The biggest discrepancies occur in days that are not on the edges and that have the full 24 hours. One of these days is also the maximum calories in the activity data,. The other is an instance in which the number of sedentary minutes is 1440 (The whole day), yet the distance and number of steps are huge. Therefore it is possible that it is just wrong.
+
+```{r echo=FALSE}
+left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories, Calories, TotalSteps, diffSteps = TotalSteps - DStep, number_of_hours) %>% filter(abs(diffSteps) == max(abs(diffSteps), na.rm = T))
+
+left_join(dailyActivity, hourly2dailyActivity, by = join_by(Id, ActivityDate == Day)) %>% transmute(Id, ActivityDate, diffCal = Calories - DCalories,  Calories, TotalSteps, diffSteps = TotalSteps - DStep, number_of_hours) %>% filter(abs(diffCal) == max(abs(diffCal), na.rm = T))
+```
+
+
+
+
 
 Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
 
@@ -186,18 +300,3 @@ Now you can explore some different relationships between activity and sleep as w
 
 This is just one example of how to get started with this data - there are many other files and questions to explore as well!
 
-```{r load heart rate, warning=FALSE, echo=FALSE}
-heartrate_seconds_A <- read_csv(paste0(data_path_A,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
-
-heartrate_seconds_B <- read_csv(paste0(data_path_B,"heartrate_seconds_merged.csv"), col_types = cols(Id = col_character(), Time = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"), Value = col_double()))
-## Splitting the date time column into date and time
-heartrate_seconds <- rbind(heartrate_seconds_A, heartrate_seconds_B)
-rm(heartrate_seconds_A)
-rm(heartrate_seconds_B)
-```
-
-```{r show heart rate, warning=FALSE}
-skim_without_charts(heartrate_seconds)
-```
-
-## Check Ids for all files
