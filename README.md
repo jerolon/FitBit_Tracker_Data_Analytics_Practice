@@ -35,7 +35,25 @@ Here is a notebook detailing the structure of the different tables and prelimina
 
 [Data loading, sorting, and filtering](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/0_Fit_Bit_Tracker_Data_Sorting_and_Filtering.md)
 
-## Data cleaning
-We have 35 unique Ids, which is a minimum sample size. 
+## Data processing and cleaning
+
+We will be using R for the data processing because they are medium size files, but they are numerous and they are somewhat related to each other, so using a spreadsheet would be complicated. We could use SQL but there is no advantage over R for files that are not so big.
+
+We have 35 unique Ids, which is over the minimum sample size to get a meaningful trend from the population. 
+
+In the document below, I document the cleaning and processing steps I took with the data prior to analysis. These include:
+
+- Merging together the data from 3.11.2016-4.11.2016 and 4.12.2016-5.12.2016, when available
+- Ensuring the integrity and uniqueness of Ids and Date-Times
+- Summarising the ranges of numeric variables and ensuring the plausibility or consistency, e.g.:
+  - No Zero calorie days, impossible weights, or heart-rates
+  - Days where the total distance travelled in all types of activity was too different from the column "TotalDistance"   
+  - No days with more than 24 hours, 1440 minutes, etc...
+  - Making sure that the data was consistent when reported at the level of days, hours and minutes
+- Filtering out the user "2891001357" who has too few records
 
 [Data cleaning documentation](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/1_Data_Cleaning_and_manipulation.md)
+
+## Data analysis. Identifying patterns and trends in the fitbit data:
+
+[Data analysis](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/2_Data_Analysis.Rmd)
