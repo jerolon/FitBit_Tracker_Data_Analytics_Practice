@@ -56,4 +56,4 @@ In the document below, I document the cleaning and processing steps I took with 
 
 ## Data analysis. Identifying patterns and trends in the fitbit data:
 
-[Data analysis](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/2_Data_Analysis.Rmd)
+[Data analysis](https://github.com/jerolon/FitBit_Tracker_Data_Analytics_Practice/blob/main/2_Data_Analysis.md)
