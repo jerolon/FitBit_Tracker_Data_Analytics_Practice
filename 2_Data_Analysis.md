@@ -81,17 +81,18 @@ n_distinct(activities$activityId)
 
     ## [1] 3284
 
-We have now the same dataframe where we have grouped spans of time that
-are similar in Intensity. Now we can explore which properties they have.
-If we group by the mean Intensity, we have four groups of activities,
-you can see that they are mostly separated by heart rate. We also plot
-“cadence” which is steps per minute.
+The data frame `activities` contains grouped spans of time that have the
+same mean intensity. Now we can explore which properties they have. In
+the below graph we plot the cadence (how many steps per minute) and the
+heart rate. The heart rate does not correlate with the cadence (ther are
+many ways to get your heart up without walking). The plot is faceted
+into different activity categories based on mean intensity.
 
-- Sedentary activities (Intensity mean 0) are defined by less than 90
+- Sedentary activities (Intensity mean 0) are defined by less than 120
   beats per minute and less than 25 steps per minute (This is a step
   every two seconds, so a bit active but not a continuous walk).
 - Moderate intensity (1) activities are very clustered between 0-50
-  steps per minute and 60-90 bpm, again, if you can imagine taking less
+  steps per minute and 60-120 bpm, again, if you can imagine taking less
   than 1 step every second, this is not a walk. This are mainly standing
   activities with sporadic walking, maybe cooking, working, or chores.
 - Fairly intense activities (2) are mainly defined by 80-120 BPM and
@@ -104,19 +105,21 @@ you can see that they are mostly separated by heart rate. We also plot
   anything from swimming, weightlifting or cycling (which the
   accelerometer does not count as steps). There is also a very natural
   division at cadence \> 120 which we will call *jogging*.  
-  ![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-5-1.png)<!-- --> We
-  will now explore intensities 0, 2, and 3 further and subdivide them.
-  Light intensity activities (1) are very well clustered. I am tempted
-  to name them as “Chores” or “Daily activities”.
+  ![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+We will now explore intensities 0, 2, and 3 further and subdivide them.
+Light intensity activities (1) are very well clustered. I am tempted to
+name them as “Chores” or “Daily activities”.
 
 #### Sedentary activities
 
 More than half of activities are classified as sedentary. This could be
-sleep activities or just activities sitting down. We classify whenever
-someone has a heartrate below 59 or average activity intensity below
-0.15, as “Deep Rest”, and anything else as just “Rest”. Below we plot
-all the activities properties against each other and we see how these
-two criteria are good at discriminating between groups of points. I
+sleep activities or just activities sitting down. We classify as “Deep
+Rest” whenever someone has a heartrate below 59 or average activity
+intensity below 0.15. Anything else is classified as “Rest”. Below we
+plot all the activities properties against each other and we see how
+these two criteria are good at discriminating between groups of points.
+Red are “Deep rest” activities and blue are “Rest” activities. I
 specially like how the biggest peak for Deep rest is at \~600 minutes,
 which could be the average sleep time.
 
@@ -147,6 +150,8 @@ the afternoon.
 
 ![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
+#### High intensity activity
+
 For the last intensity class, cadence offers a very clear way to
 subdivide activities. A cadence below 60 is classified as a “workout”
 which is any intense excercise that does not involve much walking. A
@@ -157,10 +162,6 @@ than 120 steps per minute, these tend to be the most intense and last
 roughly 1 hour.
 
 ![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
-
-#### High intensity activity
-
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 activity_summary <- activities %>% group_by(activityId) %>% summarise(Id = unique(Id),
@@ -196,10 +197,12 @@ bar <- activity_summary %>% group_by(Id,activity_name) %>% summarise(number = n(
 grid.arrange(pie, bar, ncol = 2)
 ```
 
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
-Most activities done by people involve walking. When people exercise,
-they tend not to run.
+A single user could be defined as a runner. One user spends more than
+half of his active time working out. The overall pattern is that most
+activities done by people who use fitness trackers involve walking in
+different intensities.
 
 ### Sedentarism
 
@@ -212,7 +215,15 @@ more? Or to measure steps that you’re already taking?
 ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
 ```
 
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+``` r
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=Calories)) + geom_point() + geom_smooth(method = "glm", col ="red") + theme_bw() + labs(title = "More steps = More calories", subtitle = "A linear relationship between total steps and burn calories")
+```
+
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- --> The
+good news is that no matter where you are, the more you walk, the more
+calories you will burn.
 
 What could these trends tell you about how to help market this product?
 Or areas where you might want to explore further?
