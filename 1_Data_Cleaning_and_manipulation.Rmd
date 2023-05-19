@@ -5,7 +5,7 @@ date: '2023-05-16'
 output: github_document
 ---
 
-```{r setup, include=FALSE}
+```{r 1_setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(readr)
 library(skimr)
@@ -17,7 +17,7 @@ library(janitor)
 library(ggplot2)
 ```
 
-```{r directory setup, include = FALSE}
+```{r directory_setup, include = FALSE}
 rstudioapi::getActiveDocumentContext
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 ```
@@ -49,7 +49,7 @@ rm(dailyActivity_B)
 skim_without_charts(dailyActivity)
 ```
 
-We must note the inconsistency between the name of the columns ModeratelyActiveDistance and FairlyActiveMinutes, which correspond to the same intensity category.
+When comparing different kinds of activities, we must take into account the inconsistency between the name of the columns ModeratelyActiveDistance and FairlyActiveMinutes, which correspond to the same intensity category.
 
 ### Daily sleep
 
@@ -228,15 +228,16 @@ ggplot(dailyActivity, aes(x = ActivityDate, y = Id)) + geom_tile(aes(fill = Calo
 I love this graph because it immediately tells a lot of info: why it was decided to cut the original kaggle data set from april 12, which users have gaps, and suspicious days of very low calorie expenditure. It is a sort of conditional formatting for the data. 
 I prefer to keep all available dates for now, because there is no need for the data to be exactly simultaneous.
 
-Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. We also check there is only one record per date per Id. Conversely, we filter out any record with fewer than 15 SedentaryMinutes. It is hard to think of someone who had no rest at all during the day.
-Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a date.
+Nevertheless, I will cut out the 9 days of **zero** calorie expenditure, since that is physically very unlikely and indicates an artifact. As well as days with 0 total Steps, which would indicate that someone just left their device at home. 
+We discard duplicates check there is only one record per date per Id. We filter out any record with fewer than 15 SedentaryMinutes. It is hard to think of someone who had no rest at all during the day. Conversely, I get rid of all days with more than (1440-15) sedentary minutes, (1440 is the total number of minutes in a day).
+Our final sanity check for this data set is to sum the total number of minutes of all activity types, and check that it is not greater than 1440, which is the total number of minutes in a day.
 
 ```{r filter daily zero cal}
 #filter zero calorie expenditure
-dailyActivity <- dailyActivity %>% filter(Calories > 1)
+dailyActivity <- dailyActivity %>% filter(Calories > 1, TotalSteps > 1)
 
-#filter less than 15 sedentary minutes
-dailyActivity <- dailyActivity %>% filter(SedentaryMinutes > 15)
+#filter less than 15 sedentary minutes 
+dailyActivity <- dailyActivity %>% filter(between(SedentaryMinutes, 15,1435))
 
 #Check that there are no Id, Date duplicate records
 get_dupes(dailyActivity, Id, ActivityDate)
@@ -254,13 +255,15 @@ Sleep data is very irregular and it is not clear why. There is also a tendency f
 ggplot(sleepDay, aes(x = SleepDay, y = Id)) + geom_tile(aes(fill = TotalMinutesAsleep)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Daily Sleep", subtitle = "Daily minutes spent asleep by user")
 ```
 
-The sanity checks are no record Id/SleepDay duplication and that minutes in a day do not exceed $60 * 24 = 1440$, although we have already seen this is not the case in the skim_without_charts summary.
+The sanity checks are no record Id/SleepDay duplication and that minutes in a day do not exceed $60 * 24 = 1440$, although we have already seen this is not the case in the skim_without_charts summary. 
 ```{r clean sleep}
 get_dupes(sleepDay, Id, SleepDay)
 ##There are duplicate rows
 sleepDay <- distinct(sleepDay)
 
 sleepDay %>% filter(TotalMinutesAsleep >= 1440, TotalTimeInBed >= 1440)
+
+sleepDay <- sleepDay %>% group_by(Id) %>% filter(n()>3)
 ```
 
 
@@ -340,7 +343,7 @@ dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActive
 We see that the graph is completely linear and that the sum of the distances is the same as the total distance in most cases. The total distance is never less than the sum of Active Distances, showing that the error is not random. I do not trust the points that diverge by more than 1 km. Specially the ones where the Active Distance is zero. An explanation for this is that people carried their device that day on their backpack or something, therefore steps or GPS were recorded, but not the heartrate, which determines intensity. Therefore, we will filter them out:
 
 ```{r filter divergent distances}
-dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-ActiveDistances)
+dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-differencia)
 ```
 I do not show this but this filter has the advantage of dropping more of the highly divergent data from the hourly data we saw above (see graph Daily Calorie Error), mostly for the user "402033...". This gives me more confidence that dropping these data is correct.
 
@@ -402,38 +405,20 @@ The heart rate records are very spotty. They also vary a lot in terms of the num
 heartrate_seconds %>% mutate(heart_hour = hour(Time)) %>% group_by(Id, heart_hour) %>% summarise(mean_rate = mean(Value)) %>% ggplot(aes(x = heart_hour, y = Id)) + geom_tile(aes(fill = mean_rate)) + scale_fill_distiller(palette = "YlGnBu")  + theme_dark() + labs(title = "Mean hourly heart rate", subtitle = "Mean heart rate by user by hour of day", x = "Hour of day")
 ```
 
-The heart rate data can be useful to explore the usage and exercise habits for a subset of users.
+The heart rate data can be useful to explore the usage and exercise habits for a subset of users. I think this data is more useful in combination with other information. Therefore, we will aggregate this data frame into minute-level by taking the mean within a minute and keep it as such.
 
-## Plotting a few explorations
+```{r message=FALSE, warning=FALSE}
+#Take out the seconds info
+second(heartrate_seconds$Time) <- 0
 
-What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+#Group and Summarise
+heartrate_minutes <- heartrate_seconds %>% group_by(Id, Time) %>% summarise(BPM = mean(Value))
 
-```{r}
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
+minuteAct_BPM <- inner_join(minuteActivity, heartrate_minutes, by = join_by(Id, ActivityMinute == Time))
+##Join with minute activity, 
+rm(heartrate_seconds)
 ```
 
-What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+Joining with the minute activity will lose a lot of the minute level data, so it cannot be used for all timespans but it should still be a good amount of data.
 
-```{r}
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
-```
-
-
-```{r velocities, echo=FALSE, warning=FALSE}
-dailyActivity %>% mutate(HighVelocity = 60 * VeryActiveDistance/VeryActiveMinutes,  ModerateVelocity = 60 * ModeratelyActiveDistance/FairlyActiveMinutes, LightVelocity = 60 *  LightActiveDistance/LightlyActiveMinutes, SedentaryVelocity = 60 * SedentaryActiveDistance/SedentaryMinutes) %>% 
-    #it has to be transformed to long format
-    pivot_longer(names_to = "Intensity_Class", values_to = "Velocity", cols = ends_with("Velocity")) %>% 
-    #Boxplot
-    ggplot(aes(x = Intensity_Class, y = Velocity)) + geom_jitter(alpha = 0.2) + geom_boxplot(outlier.shape = NA) + theme_bw() 
-```
-
-This is at the same time a sanity check (no one is travelling at 100 km/h, no sedentary velocity is significantly above 0) and an overview of the kind of activities people are doing. A few jog. Most walk (or swim?). The zero velocities in all categories apart from sedentary are probably people on a treadmill or stationary bike, or lifting weights. Lower than average velocities could be people hiking, swimming or going upstairs: intense activities that do not cover much distance.
-
-What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
-
-Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
-
-Now you can explore some different relationships between activity and sleep as well. For example, do you think participants who sleep more also take more steps or fewer steps per day? Is there a relationship at all? How could these answers help inform the marketing strategy of how you position this new product?
-
-This is just one example of how to get started with this data - there are many other files and questions to explore as well!
 

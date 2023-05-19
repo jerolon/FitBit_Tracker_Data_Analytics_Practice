@@ -1,0 +1,115 @@
+---
+title: "Data Analysis"
+author: "Jeronimo Miranda"
+date: '2023-05-18'
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+```
+
+```{r message=FALSE, results='hide'}
+knitr::knit('1_Data_Cleaning_and_manipulation.rmd', tangle=TRUE)
+source('1_Data_Cleaning_and_manipulation.R')
+```
+
+```{r}
+library(changepoint)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+```
+
+
+## Intro
+
+For the analysis, we assume the (data cleaning steps)[./1_Data_Cleaning_and_manipulation.md] have been run and you have the following data objects in your R environment:
+
+- dailyActivity, hourly2dailyActivity
+- heartrate_minutes
+- hourlyActivity, minute2hour
+- minuteActivity, minuteAct_BPM
+- sleepDay
+- weightLogInfo
+
+## Plotting a few explorations
+
+I would like to infer the kind of activities that the users are doing during the study. First, we want to check the daily data for a clue. We graph the velocity for each intensity class.
+
+```{r velocities, echo=FALSE, warning=FALSE}
+dailyActivity %>% mutate(HighVelocity = 60 * VeryActiveDistance/VeryActiveMinutes,  ModerateVelocity = 60 * ModeratelyActiveDistance/FairlyActiveMinutes, LightVelocity = 60 *  LightActiveDistance/LightlyActiveMinutes, SedentaryVelocity = 60 * SedentaryActiveDistance/SedentaryMinutes) %>% 
+    #it has to be transformed to long format
+    pivot_longer(names_to = "Intensity_Class", values_to = "Velocity", cols = ends_with("Velocity")) %>% 
+    #Boxplot
+    ggplot(aes(x = Intensity_Class, y = Velocity)) + geom_jitter(alpha = 0.2) + geom_boxplot(outlier.shape = NA) + theme_bw() + labs(title = "Velocity vs intensity of activity", subtitle = "Intensity classes have a distinct velocity")
+```
+
+This is at the same time a sanity check (no one is travelling at 100 km/h, no sedentary velocity is significantly above 0) and an overview of the kind of activities people are doing. A few jog. Most walk (or swim?). The zero velocities in all categories apart from sedentary are probably people on a treadmill or stationary bike, or lifting weights. Lower than average velocities could be people hiking, swimming or going upstairs: intense activities that do not cover much distance. It could also mean differences between people.
+
+We will use the data frame with minute resolution to construct an "Activities" dataframe. Here, I want to aggregate the minutes in a user day that have the same excercise intensity. To do so, we perform a mutate operation where we compare the Intensity column with itself to check changes in activity levels per minute. Another column gives us information on the time between records. Activities will be records that have the same intensity and do not have temporal jumps bigger than 10 minutes.
+```{r}
+activities <- minuteAct_BPM %>% group_by(Id) %>% 
+  #Will be true when activity changes
+  mutate(IntensityChange= Intensity != lag(Intensity, def = first(Intensity)),
+         #Timegap is true whenever there is a gap bigger than 10 minutes
+         timegap = minutes(10) < (ActivityMinute - lag(ActivityMinute, def = first(ActivityMinute))),
+         #ActivityChange will only be true when either the activity changes or there is a big time jump
+         ActivityChange = IntensityChange | timegap
+         )
+```
+
+Using the changepoint algorigthm mentioned [here](https://rpubs.com/richkt/269908). We just pass the whole column, since it is already arranged by Id and DateTime, to find changes in mean intensity. 
+
+```{r}
+minuteAct_BPM <- arrange(minuteAct_BPM,Id,ActivityMinute )
+#find the positions where the mean intensity changes
+changepoint_position <- cpt.mean(minuteAct_BPM$Intensity,penalty='Manual',pen.value=8,method='PELT') %>% cpts()
+
+minuteAct_BPM$IntensityChange <- rep(FALSE, nrow(minuteAct_BPM))
+minuteAct_BPM$IntensityChange[changepoint_position + 1] <- TRUE
+
+activities <- minuteAct_BPM %>% 
+  #Will be true when activity changes
+  mutate(#Timegap is true whenever there is a gap bigger than 10 minutes
+         timegap = minutes(10) < abs(ActivityMinute - lag(ActivityMinute, def = first(ActivityMinute))),
+         #ActivityChange will only be true when either the activity changes or there is a big time jump
+         ActivityChange = IntensityChange | timegap,
+         activityId = cumsum(ActivityChange)
+         ) %>% select(-timegap, -ActivityChange, -IntensityChange)
+
+```
+
+```{r}
+
+activities %>% group_by(activityId) %>% summarise(duration = (max(ActivityMinute) - min(ActivityMinute))/dminutes(1), duration = if_else(duration == 0,1,duration), Calories = sum(Calories), steps_per_minute = sum(Steps)/duration,  hrate = mean(BPM), max_Int = max(Intensity)) %>% ggplot() + geom_point(aes(steps_per_minute, hrate, col = max_Int)) + theme_bw()
+```
+
+We have now the same dataframe where we have grouped spans of time that are similar in activity. Now we can see which properties they have
+
+### Sedentarism
+
+What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+
+```{r}
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
+```
+
+What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+
+```{r}
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
+```
+
+What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
+
+Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
+
+Now you can explore some different relationships between activity and sleep as well. For example, do you think participants who sleep more also take more steps or fewer steps per day? Is there a relationship at all? How could these answers help inform the marketing strategy of how you position this new product?
+
+This is just one example of how to get started with this data - there are many other files and questions to explore as well!
+
+
+## Sleep and activity
+
