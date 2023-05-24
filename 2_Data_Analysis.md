@@ -188,21 +188,29 @@ their day. Not in physical activity. Therefore, we filter out the
 sedentary activities and normal life to get only physical activities,
 however mild.
 
-``` r
-library("gridExtra")
-pie <- activity_summary %>% group_by(activity_name) %>% summarise(number = n()) %>% filter(!stringr::str_ends(activity_name, "Rest"), activity_name != "Normal activity") %>%  ggplot(aes(x="", y = number, fill = activity_name)) + geom_bar(width = 1, stat = "identity") + coord_polar("y", start = 0) + scale_fill_brewer(name = "Activity", palette = "Dark2") + theme_minimal() + blank_theme + theme(axis.text.x=element_blank()) + labs(title = "Tipes of activities of fitbit users", subtitle = "Fitbit user activity is dominated by walking")
-
-bar <- activity_summary %>% group_by(Id,activity_name) %>% summarise(number = n()) %>% filter(!stringr::str_ends(activity_name, "Rest"), activity_name != "Normal activity") %>% mutate(perc = 100 * number/sum(number)) %>%  ggplot(aes(y=Id, x = perc, fill = activity_name)) + geom_bar(width = 0.7, stat = "identity") + scale_fill_brewer(palette = "Dark2") + theme_bw() + theme(axis.text.y = element_blank(), legend.position="none") + labs(subtitle = "Activity type by user", x = "Percentage", y = "User")
-
-grid.arrange(pie, bar, ncol = 2)
-```
-
 ![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 A single user could be defined as a runner. One user spends more than
-half of his active time working out. The overall pattern is that most
-activities done by people who use fitness trackers involve walking in
-different intensities.
+half of his active time working out. However, the overall pattern is
+that most activities done by people who use fitness trackers involve
+walking in different intensities.
+
+#### Activity Logging
+
+Users track their activities automatically. In fact, the total distance
+that is manually logged is overwhelmingly low, suggesting that this is
+not a popular feature.
+
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+This does not mean that we should conclude that the logged activities
+should be eliminated. Only 6 users logged any activity distance at all,
+but for these 6, the distance tracked by manual logging represents a
+substantial percentage of the total distance they track. Moreover, even
+these users do not log activities everyday, but they log a greatear
+total distance on the days that they manually log their activities.
+
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ### Sedentarism
 
@@ -215,40 +223,92 @@ more? Or to measure steps that you’re already taking?
 ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
 ```
 
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+This is very interesting, it suggests that we can segment users by those
+that have more than 1000 sedentary minutes a day and those that have
+less, lets do that. We will put the users who have more than 1000
+Sedentary minutes more than half their dates on a group called
+“Sedentary”.
 
 ``` r
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=Calories)) + geom_point() + geom_smooth(method = "glm", col ="red") + theme_bw() + labs(title = "More steps = More calories", subtitle = "A linear relationship between total steps and burn calories")
+dailyActivity <- dailyActivity %>% group_by(Id) %>% mutate(User_Segment = if_else(median(SedentaryMinutes) > 1000, "Sedentary", "Active"))
 ```
 
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- --> The
-good news is that no matter where you are, the more you walk, the more
-calories you will burn.
+Now, sedentary users might want to minimize their total sedentary
+minutes, at least to less than 1000, which would put them on the
+“Active” group. We can check which of the variables minimizes the
+sedentarism, in order to better help this group reach their goals. We
+will plot the sedentary minutes against other variables and calculate
+negative correlations. When we take a look at the left most column and
+the top row, we see that, although total steps and sedentary minutes are
+negatively correlated, the strongest negative correlation is
+LightlyActive Minutes!
 
-What could these trends tell you about how to help market this product?
-Or areas where you might want to explore further?
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
-Note that there were more participant Ids in the daily activity dataset
-that have been filtered out using merge. Consider using ‘outer_join’ to
-keep those in the dataset.
+This is expected – because a day only has 1440 minutes, if you spend at
+least 440 minutes being a little active, then you cannot spend more than
+1000 minutes inactive. Still, it suggests that for people that are
+struggling to be more active, an emphasis on time doing some activity,
+any activity, is likely to help them more achieve their goals, even on
+days when they cannot reach the specified number of steps. When you look
+at the bottom row of the graph below, it is clear that “Sedentary” users
+are walking more than 5000 or even 10000 steps sometimes. Yet, despite
+this, they are still very sedentary most days. This could suggest that
+an emphasis on doing 10,000 steps a day might discourage people who do
+not have the time every day, or that once they achieve this, they are
+too tired to do much else.
 
-This is just one example of how to get started with this data - there
-are many other files and questions to explore as well!
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+The great news is that, for users who are looking to be more active and
+burning more calories, the relationship between steps and calories is
+almost strictly linear. There is no magic number: 5,000 steps is better
+than 0 steps. 10,000 steps is better, but there is no reason to stop
+there, as the calories burned keep increasing. You can still set a
+target number of steps, but you should know that whatever activity you
+do is valuable to stay healthy.
+
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ## Sleep and activity
 
-What’s the relationship between minutes asleep and time in bed? You
-might expect it to be almost completely linear - are there any
-unexpected trends?
+We have sleep records for a subset of users. What’s the relationship
+between minutes asleep and time in bed? You might expect it to be almost
+completely linear - and it is. But there is a trend for people that are
+spending a typical amount of time in bed (6 to 10 hours), but are
+getting less sleep than they think, and usually less than 7.5 hours,
+which is recommended.
 
 ``` r
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep/60, y=TotalTimeInBed/60)) + geom_point() + theme_bw() + labs(x = "Hours asleep", y = "Time in bed") + annotate("rect", xmin = 3.4, xmax = 7.5, ymin = 5, ymax = 11, alpha = 0.2) + scale_x_continuous(breaks = seq(0, 16, by = 2)) + scale_y_continuous(breaks = seq(0, 16, by = 2)) + geom_abline(col = "red", intercept = 0, slope = 1)
 ```
 
-![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
-Now you can explore some different relationships between activity and
-sleep as well. For example, do you think participants who sleep more
-also take more steps or fewer steps per day? Is there a relationship at
-all? How could these answers help inform the marketing strategy of how
-you position this new product?
+D think participants who sleep more also take more steps or fewer steps
+per day? Is there a relationship at all? How could these answers help
+inform the marketing strategy of how you position this new product?
+
+Amazingly, there is little correlation between total steps and minutes
+asleep! And this correlation is negative, that is the more steps you
+take, the worse your sleep is. What is more surprising is the
+anti-correlation with the number of sedentary minutes! I would have
+expected completely the opposite, since sleep counts into sedentary
+minutes (you are not very active when you are asleep). The graphs
+further our conclusion that in order to better your general health,
+including sleep, it is better for people to monitor how much time they
+are active during the day, rather than reaching a specified number of
+steps.
+
+![](2_Data_Analysis_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+In conclusion, although some specialized users use the tracker as a
+monitor for running, the main trend of most users is to wear the device
+as they go through their daily activities, which include dedicated
+workout or running sessions very seldomly. Instead, most people activity
+consists on walking at a slow to moderate pace. Although the emphasis on
+step count and distance is useful for runnners, most users would benefit
+from the tracker as a general monitor that can give feedback on activity
+levels, calories, sleep and more.

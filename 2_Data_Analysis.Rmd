@@ -6,7 +6,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE)
 ```
 
 ```{r message=FALSE, include=FALSE, results='hide'}
@@ -50,7 +50,7 @@ This is at the same time a sanity check (no one is travelling at 100 km/h, no se
 
 We will use the data frame with minute resolution to construct an "Activities" data frame. Here, I want to aggregate the minutes in a user day that have the same excercise intensity. To find the times when intensity mean changes, we use the changepoint algorigthm mentioned [here](https://rpubs.com/richkt/269908). We just pass the whole column, since it is already arranged by Id and DateTime.
 
-```{r}
+```{r, echo=TRUE}
 minuteAct_BPM <- arrange(minuteAct_BPM,Id,ActivityMinute )
 #find the positions where the mean intensity changes
 changepoint_position <- cpt.mean(minuteAct_BPM$Intensity,penalty='Manual',pen.value=8,method='PELT') %>% cpts()
@@ -62,7 +62,7 @@ minuteAct_BPM$IntensityChange[changepoint_position + 1] <- TRUE
 
 Now we have a column `IntensityChange` that is `TRUE` whenever we detected a change in activity levels. Now we calculate another column which gives us information on the time gap between records. We use the combination of these two columns to cluster Activities by clustering groups of adjacent records that have the same mean intensity and do not have temporal jumps bigger than 10 minutes.
 
-```{r}
+```{r, echo=TRUE}
 
 activities <- minuteAct_BPM %>% 
   #Will be true when activity changes
@@ -77,11 +77,11 @@ n_distinct(activities$activityId)
 
 ```
 
-We have now the same dataframe where we have grouped spans of time that are similar in Intensity. Now we can explore which properties they have. If we group by the mean Intensity, we have four groups of activities, you can see that they are mostly separated by heart rate. We also plot "cadence" which is steps per minute.
+The data frame `activities` contains grouped spans of time that have the same mean intensity. Now we can explore which properties they have. In the below graph we plot the cadence (how many steps per minute) and the heart rate. The heart rate does not correlate with the cadence (ther are many ways to get your heart up without walking). The plot is faceted into different activity categories based on mean intensity.
 
-- Sedentary activities (Intensity mean 0) are defined by less than 90 beats per minute and less than 25 steps per minute (This is a step every two seconds, so a bit active but not a continuous walk). 
-- Moderate intensity (1) activities are very clustered between 0-50 steps per minute and 60-90 bpm, again, if you can imagine taking less than 1 step every second, this is not a walk. This are mainly standing activities with sporadic walking, maybe cooking, working, or chores.
-- Fairly intense activities (2) are mainly defined by 80-120 BPM and less than 100 Steps per minute. I like how this category is so well defined by a BPM band, and it could be further subdivided by cadence. 
+- Sedentary activities (Intensity mean 0) are defined by less than 120 beats per minute and less than 25 steps per minute (This is a step every two seconds, so a bit active but not a continuous walk).
+- Moderate intensity (1) activities are very clustered between 0-50 steps per minute and 60-120 bpm, again, if you can imagine taking less than 1 step every second, this is not a walk. This are mainly standing activities with sporadic walking, maybe cooking, working, or chores.
+- Fairly intense activities (2) are mainly defined by 80-120 BPM and less than 100 Steps per minute. I like how this category is so well defined by a BPM band, and it could be further subdivided by cadence.
 - Last, the high intensity activities (3) are defined by either a > 100 BPM or >80 BPM combined with a cadence greater than 100 steps per minute. This suggests that we could subdivide this category further into brisk walking, and intense stationary exercise this could be anything from swimming, weightlifting or cycling (which the accelerometer does not count as steps). There is also a very natural division at cadence > 120 which we will call *jogging*.  
 ```{r echo=FALSE}
 activities %>% group_by(activityId) %>% summarise(
@@ -96,10 +96,11 @@ activities %>% group_by(activityId) %>% summarise(
   Intensity_class = round(Int)) %>% ggplot() +
   geom_point(aes(cadence, hrate, col = Int)) + theme_bw() + facet_wrap(~Intensity_class)
 ```
+
 We will now explore intensities 0, 2, and 3 further and subdivide them. Light intensity activities (1) are very well clustered. I am tempted to name them as "Chores" or "Daily activities".
 
 #### Sedentary activities
-More than half of activities are classified as sedentary. This could be sleep activities or just activities sitting down. We classify whenever someone has a heartrate below 59 or average activity intensity below 0.15, as "Deep Rest", and anything else as just "Rest". Below we plot all the activities properties against each other and we see how these two criteria are good at discriminating between groups of points. I specially like how the biggest peak for Deep rest is at ~600 minutes, which could be the average sleep time. 
+More than half of activities are classified as sedentary. This could be sleep activities or just activities sitting down. We classify as "Deep Rest" whenever someone has a heartrate below 59 or average activity intensity below 0.15. Anything else is classified as "Rest". Below we plot all the activities properties against each other and we see how these two criteria are good at discriminating between groups of points. Red are "Deep rest" activities and blue are "Rest" activities. I specially like how the biggest peak for Deep rest is at ~600 minutes, which could be the average sleep time. 
 
 ```{r sedentary activities,echo=FALSE}
 library(GGally)
@@ -161,30 +162,10 @@ activities %>% group_by(activityId) %>% summarise(start = hour(min(ActivityMinut
     
 ```
 
+#### High intensity activity
+
 For the last intensity class, cadence offers a very clear way to subdivide activities. A cadence below 60 is classified as a 
 "workout" which is any intense excercise that does not involve much walking. A cadence between 60-120 is a brisk walk, a walk that is challenging, even if it is not so fast. It could include people walking upstairs or hiking. The last categorie is "Jogging", where people are going more than 120 steps per minute, these tend to be the most intense and last roughly 1 hour. 
-
-```{r,echo=FALSE}
-activities %>% group_by(activityId) %>% summarise(
-    #Just divide the max time for the min time and normalize to minutes
-    duration = (max(ActivityMinute) - min(ActivityMinute))/dminutes(1),
-    #Activities with only one minute, should probably be deleted
-    duration = if_else(duration == 0,1,duration),
-    #cadence is the number of steps per minute
-    cadence = sum(Steps)/duration,  hrate = mean(BPM),
-    Int = mean(Intensity), calories = sum(Calories),
-    #Using "round" because still want to keep it as factor
-    Intensity_class = round(Int)) %>%
-    filter(Intensity_class == 3) %>% 
-    #classify into deep rest and rest
-    mutate(activity_name = case_when(cadence < 60 ~ "Workout", between(cadence,60,120) ~ "Brisk walk", cadence > 120 ~ "Jogging")) %>% 
-    ggpairs(columns = 2:6, aes(color = as.factor(activity_name), alpha = 0.5), upper = list(continuous  = "points")) + theme_bw()
-```
-
-
-
-
-#### High intensity activity
 
 ```{r,echo=FALSE}
 activities %>% group_by(activityId) %>% summarise(
@@ -239,7 +220,7 @@ activity_summary <- activities %>% group_by(activityId) %>% summarise(Id = uniqu
 Most of the time, people spend either resting or going normally about their day. Not in physical activity. Therefore, we filter out the sedentary activities and normal life to get only physical activities, however mild. 
 
 
-```{r}
+```{r echo=FALSE}
 library("gridExtra")
 pie <- activity_summary %>% group_by(activity_name) %>% summarise(number = n()) %>% filter(!stringr::str_ends(activity_name, "Rest"), activity_name != "Normal activity") %>%  ggplot(aes(x="", y = number, fill = activity_name)) + geom_bar(width = 1, stat = "identity") + coord_polar("y", start = 0) + scale_fill_brewer(name = "Activity", palette = "Dark2") + theme_minimal() + blank_theme + theme(axis.text.x=element_blank()) + labs(title = "Tipes of activities of fitbit users", subtitle = "Fitbit user activity is dominated by walking")
 
@@ -248,7 +229,29 @@ bar <- activity_summary %>% group_by(Id,activity_name) %>% summarise(number = n(
 grid.arrange(pie, bar, ncol = 2)
 ```
 
-Most activities done by people involve walking. When people exercise, they tend not to run.
+A single user could be defined as a runner. One user spends more than half of his active time working out. However, the overall pattern is that most activities done by people who use fitness trackers involve walking in different intensities.
+
+#### Activity Logging
+
+Users track their activities automatically. In fact, the total distance that is manually logged is overwhelmingly low, suggesting that this is not a popular feature. 
+
+```{r echo=FALSE}
+dailyActivity %>% mutate(Logged = if_else(LoggedActivitiesDistance > 0, "Logged Activities", "No Logged Activities")) %>% group_by(Logged) %>% summarise(number = n()) %>%  ggplot(aes(x="", y = number, fill = Logged)) + geom_bar(width = 1, stat = "identity") + coord_polar("y", start = 0) + scale_fill_brewer(name = "Activity", palette = "Dark2") + theme_minimal() + blank_theme + theme(axis.text.x=element_blank()) + labs(title = "Minimal use of Logged activities feature", subtitle = "Days with Logged activities")
+```
+
+This does not mean that we should conclude that the logged activities should be eliminated. Only 6 users logged any activity distance at all, but for these 6, the distance tracked by manual logging represents a substantial percentage of the total distance they track. Moreover, even these users do not log activities everyday, but they log a greatear total distance on the days that they manually log their activities.
+
+```{r, echo=FALSE}
+a <- dailyActivity %>% mutate(manual = 100 * LoggedActivitiesDistance / (LoggedActivitiesDistance + TotalDistance)) %>% group_by(Id) %>% filter(any(manual > 0)) %>% ggplot(aes(y = Id, x = manual)) + geom_boxplot(orientation = "y") + theme_bw() + labs(title = "A small number of of users Manually Logs their activities", subtitle = "Percent of Logged Activities Distance of the users that use the feature", x = "Logged distance as % of Total")
+
+#The users that have any days with logged activities
+manualLoggers <- dailyActivity %>% filter(any(LoggedActivitiesDistance > 0)) %>% pull(Id) %>% unique()
+
+b <- dailyActivity %>% filter(Id %in% manualLoggers) %>% ggplot(aes(x = LoggedActivitiesDistance, y = TotalDistance)) + geom_point(aes(col = Id)) + geom_smooth(method = "glm", col = "red") + theme_bw() + labs(title = "Logging helps being more active", subtitle = "Correlation between daily logged distance and total distance", x = "Daily distance logged", y = "Total distance") + theme(legend.position="none")
+
+grid.arrange(a, b, nrow = 2)
+```
+
 
 ### Sedentarism
 
@@ -258,20 +261,60 @@ What's the relationship between steps taken in a day and sedentary minutes? How 
 ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
 ```
 
+This is very interesting, it suggests that we can segment users by those that have more than 1000 sedentary minutes a day and those that have less, lets do that. We will put the users who have more than 1000 Sedentary minutes more than half their dates on a group called "Sedentary".
 
-What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
+```{r}
+dailyActivity <- dailyActivity %>% group_by(Id) %>% mutate(User_Segment = if_else(median(SedentaryMinutes) > 1000, "Sedentary", "Active"))
+```
 
-Note that there were more participant Ids in the daily activity dataset that have been filtered out using merge. Consider using 'outer_join' to keep those in the dataset. 
+Now, sedentary users might want to minimize their total sedentary minutes, at least to less than 1000, which would put them on the "Active" group. We can check which of the variables minimizes the sedentarism, in order to better help this group reach their goals. We will plot the sedentary minutes against other variables and calculate negative correlations. When we take a look at the left most column and the top row, we see that, although total steps and sedentary minutes are negatively correlated, the strongest negative correlation is LightlyActive Minutes!
 
-This is just one example of how to get started with this data - there are many other files and questions to explore as well!
+```{r echo=FALSE}
+dailyActivity %>% relocate(SedentaryMinutes, .after = ActivityDate) %>% ggpairs(columns = c(3,4,8:10,12:14),aes(color = as.factor(User_Segment)))
+```
+
+This is expected -- because a day only has 1440 minutes, if you spend at least 440 minutes being a little active, then you cannot spend more than 1000 minutes inactive. Still, it suggests that for people that are struggling to be more active, an emphasis on time doing some activity, any activity, is likely to help them more achieve their goals, even on days when they cannot reach the specified number of steps. 
+When you look at the bottom row of the graph below, it is clear that "Sedentary" users are walking more than 5000 or even 10000 steps sometimes. Yet, despite this, they are still very sedentary most days. This could suggest that an emphasis on doing 10,000 steps a day might discourage people who do not have the time every day, or that once they achieve this, they are too tired to do much else.
+
+```{r echo=FALSE, fig.height=5, fig.width=7}
+a <- ggplot(data=dailyActivity, aes(x=LightlyActiveMinutes, y=SedentaryMinutes)) + geom_point(aes(col = User_Segment)) + geom_smooth(method = "glm", aes(col = User_Segment)) + theme_bw() + labs(title = "Being even slightly active is a good start", subtitle = " Relationship between light activity and sedentarism") + facet_wrap(~ User_Segment) + geom_hline(aes(yintercept=1000), linetype = "dashed", col = "red", size = 1) +  theme(legend.position="none")
+
+b <- ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point(aes(col = User_Segment)) + geom_smooth(method = "glm", aes(col = User_Segment)) + theme_bw() + labs(title = " Achieving more than a 1000 steps is no guarantee", subtitle = "Relationship between total steps and sedentary minutes") + facet_wrap(~ User_Segment) + geom_hline(aes(yintercept=1000), linetype = "dashed", col = "red", size = 1) + theme(legend.position="none")
+
+grid.arrange(a, b, nrow = 2)
+```
+
+The great news is that, for users who are looking to be more active and burning more calories, the relationship between steps and calories is almost strictly linear. There is no magic number: 5,000 steps is better than 0 steps. 10,000 steps is better, but there is no reason to stop there, as the calories burned keep increasing. You can still set a target number of steps, but you should know that whatever activity you do is valuable to stay healthy.
+
+
+```{r, echo=FALSE}
+ggplot(data=dailyActivity, aes(x=TotalSteps, y=Calories)) + geom_point() + geom_smooth(method = "glm", col ="red") + theme_bw() + labs(title = "More steps = More calories", subtitle = "A linear relationship between total steps and burned calories") + facet_wrap(~User_Segment)
+```
 
 
 ## Sleep and activity
 
-What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
+We have sleep records for a subset of users. What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - and it is. But there is a trend for people that are spending a typical amount of time in bed (6 to 10 hours), but are getting less sleep than they think, and usually less than 7.5 hours, which is recommended. 
 
 ```{r}
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
+ggplot(data=sleepDay, aes(x=TotalMinutesAsleep/60, y=TotalTimeInBed/60)) + geom_point() + theme_bw() + labs(x = "Hours asleep", y = "Time in bed") + annotate("rect", xmin = 3.4, xmax = 7.5, ymin = 5, ymax = 11, alpha = 0.2) + scale_x_continuous(breaks = seq(0, 16, by = 2)) + scale_y_continuous(breaks = seq(0, 16, by = 2)) + geom_abline(col = "red", intercept = 0, slope = 1)
 ```
 
-Now you can explore some different relationships between activity and sleep as well. For example, do you think participants who sleep more also take more steps or fewer steps per day? Is there a relationship at all? How could these answers help inform the marketing strategy of how you position this new product?
+
+D think participants who sleep more also take more steps or fewer steps per day? Is there a relationship at all? How could these answers help inform the marketing strategy of how you position this new product?
+
+Amazingly, there is little correlation between total steps and minutes asleep!
+And this correlation is negative, that is the more steps you take, the worse your sleep is. What is more surprising is the anti-correlation with the number of sedentary minutes! I would have expected completely the opposite, since sleep counts into sedentary minutes (you are not very active when you are asleep). The graphs further our conclusion that in order to better your general health, including sleep, it is better for people to monitor how much time they are active during the day, rather than reaching a specified number of steps.
+
+```{r echo=FALSE}
+sleep_joined <- left_join(sleepDay, dailyActivity, by = join_by(Id, SleepDay == ActivityDate))
+
+sleep1 <- sleep_joined %>% ggplot(aes(x = TotalSteps, y = TotalMinutesAsleep)) + geom_point() + geom_smooth(col = "red", method = "glm") + annotate("text", x = 15000, y = 700, label = paste0("italic(R)^2 == ", cor(sleep_joined$TotalSteps, sleep_joined$TotalMinutesAsleep, use = "pairwise.complete.obs")), parse = TRUE) + theme_bw()
+
+sleep2 <- sleep_joined %>% na.omit() %>% ggplot(aes(x = SedentaryMinutes, y = TotalMinutesAsleep)) + geom_point() + geom_smooth(col = "red", method = "glm") + annotate("text", x = 1000, y = 700, label = paste0("italic(R)^2 == ", cor(sleep_joined$SedentaryMinutes, sleep_joined$TotalMinutesAsleep, use = "pairwise.complete.obs")), parse = TRUE) + theme_bw()
+
+grid.arrange(sleep1, sleep2, nrow = 2)
+```
+
+
+In conclusion, although some specialized users use the tracker as a monitor for running, the main trend of most users is to wear the device as they go through their daily activities. Although users incorporate running into their workouts, they do so very seldomly. Instead, most people activity consists on walking at a slow to moderate pace, as well as workout that do not involve step count. Although the emphasis on step count and distance is useful for runnners, most users would benefit from the tracker as a general monitor that can give feedback on activity levels, calories, sleep, heart rate and more.
