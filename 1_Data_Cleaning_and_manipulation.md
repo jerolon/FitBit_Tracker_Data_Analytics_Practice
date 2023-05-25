@@ -433,10 +433,10 @@ exactly simultaneous.
 Nevertheless, I will cut out the 9 days of **zero** calorie expenditure,
 since that is physically very unlikely and indicates an artifact. As
 well as days with 0 total Steps, which would indicate that someone just
-left their device at home. We discard duplicates check there is only one
-record per date per Id. We filter out any record with fewer than 15
-SedentaryMinutes. It is hard to think of someone who had no rest at all
-during the day. Conversely, I get rid of all days with more than
+left their device at home. We discard duplicates, by checking there is
+only one record per date per Id. We filter out any record with fewer
+than 15 SedentaryMinutes. It is hard to think of someone who had no rest
+at all during the day. Conversely, I get rid of all days with more than
 (1440-15) sedentary minutes, (1440 is the total number of minutes in a
 day). Our final sanity check for this data set is to sum the total
 number of minutes of all activity types, and check that it is not
