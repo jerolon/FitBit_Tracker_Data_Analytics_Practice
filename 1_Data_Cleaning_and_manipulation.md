@@ -81,7 +81,8 @@ Data summary
 | SedentaryMinutes         |         0 |             1 | 1001.35 |  304.17 |   0 |  734.00 | 1062.00 |  1246.00 |  1440.00 |
 | Calories                 |         0 |             1 | 2294.81 |  725.53 |   0 | 1820.00 | 2129.00 |  2781.00 |  4900.00 |
 
-We must note the inconsistency between the name of the columns
+When comparing different kinds of activities, we must take into account
+the inconsistency between the name of the columns
 ModeratelyActiveDistance and FairlyActiveMinutes, which correspond to
 the same intensity category.
 
@@ -430,20 +431,23 @@ available dates for now, because there is no need for the data to be
 exactly simultaneous.
 
 Nevertheless, I will cut out the 9 days of **zero** calorie expenditure,
-since that is physically very unlikely and indicates an artifact. We
-also check there is only one record per date per Id. Conversely, we
-filter out any record with fewer than 15 SedentaryMinutes. It is hard to
-think of someone who had no rest at all during the day. Our final sanity
-check for this data set is to sum the total number of minutes of all
-activity types, and check that it is not greater than 1440, which is the
-total number of minutes in a date.
+since that is physically very unlikely and indicates an artifact. As
+well as days with 0 total Steps, which would indicate that someone just
+left their device at home. We discard duplicates check there is only one
+record per date per Id. We filter out any record with fewer than 15
+SedentaryMinutes. It is hard to think of someone who had no rest at all
+during the day. Conversely, I get rid of all days with more than
+(1440-15) sedentary minutes, (1440 is the total number of minutes in a
+day). Our final sanity check for this data set is to sum the total
+number of minutes of all activity types, and check that it is not
+greater than 1440, which is the total number of minutes in a day.
 
 ``` r
 #filter zero calorie expenditure
-dailyActivity <- dailyActivity %>% filter(Calories > 1)
+dailyActivity <- dailyActivity %>% filter(Calories > 1, TotalSteps > 1)
 
-#filter less than 15 sedentary minutes
-dailyActivity <- dailyActivity %>% filter(SedentaryMinutes > 15)
+#filter less than 15 sedentary minutes 
+dailyActivity <- dailyActivity %>% filter(between(SedentaryMinutes, 15,1435))
 
 #Check that there are no Id, Date duplicate records
 get_dupes(dailyActivity, Id, ActivityDate)
@@ -515,6 +519,10 @@ sleepDay %>% filter(TotalMinutesAsleep >= 1440, TotalTimeInBed >= 1440)
     ## # A tibble: 0 x 5
     ## # ... with 5 variables: Id <chr>, SleepDay <dttm>, TotalSleepRecords <dbl>,
     ## #   TotalMinutesAsleep <dbl>, TotalTimeInBed <dbl>
+
+``` r
+sleepDay <- sleepDay %>% group_by(Id) %>% filter(n()>3)
+```
 
 #### Checking the date time in the hourly data
 
@@ -623,7 +631,7 @@ between the daily and the hourly data.
     ## # A tibble: 1 x 20
     ##   Id         ActivityD~1 Total~2 Total~3 Track~4 Logge~5 VeryA~6 Moder~7 Light~8
     ##   <chr>      <date>        <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>
-    ## 1 8583815059 2016-05-03    12015    9.37    9.37       0       0       0       0
+    ## 1 8583815059 2016-05-05    12427    9.69    9.69       0       0       0    1.18
     ## # ... with 11 more variables: SedentaryActiveDistance <dbl>,
     ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
@@ -663,7 +671,7 @@ not the heartrate, which determines intensity. Therefore, we will filter
 them out:
 
 ``` r
-dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-ActiveDistances)
+dailyActivity <- dailyActivity %>% mutate(ActiveDistances = VeryActiveDistance + ModeratelyActiveDistance + LightActiveDistance + SedentaryActiveDistance, differencia = TotalDistance - ActiveDistances)  %>%  filter(differencia < 1) %>% select(-differencia)
 ```
 
 I do not show this but this filter has the advantage of dropping more of
@@ -695,7 +703,7 @@ filter(dailyActivity, filter_vector, VeryActiveMinutes == 0)
     ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
     ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
-    ## #   differencia <dbl>
+    ## #   ActiveDistances <dbl>
 
 ``` r
 filter_vector <- xor(dailyActivity$ ModeratelyActiveDistance, dailyActivity$ FairlyActiveMinutes)
@@ -709,7 +717,7 @@ filter(dailyActivity, filter_vector, FairlyActiveMinutes == 0)
     ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
     ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
-    ## #   differencia <dbl>
+    ## #   ActiveDistances <dbl>
 
 ``` r
 filter_vector <- xor(dailyActivity$LightActiveDistance, dailyActivity$LightlyActiveMinutes)
@@ -723,7 +731,7 @@ filter(dailyActivity, filter_vector, LightlyActiveMinutes == 0)
     ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
     ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
-    ## #   differencia <dbl>
+    ## #   ActiveDistances <dbl>
 
 ``` r
 filter_vector <- xor(dailyActivity$SedentaryActiveDistance, dailyActivity$SedentaryMinutes)
@@ -737,7 +745,7 @@ filter(dailyActivity, filter_vector, SedentaryMinutes == 0)
     ## #   LightActiveDistance <dbl>, SedentaryActiveDistance <dbl>,
     ## #   VeryActiveMinutes <dbl>, FairlyActiveMinutes <dbl>,
     ## #   LightlyActiveMinutes <dbl>, SedentaryMinutes <dbl>, Calories <dbl>,
-    ## #   differencia <dbl>
+    ## #   ActiveDistances <dbl>
 
 Our data is consistent in this way. There is no distance that is
 traveled in zero time, which would be impossible.
@@ -799,7 +807,7 @@ The aggregated minute data is basically identical to the hour data,
 except for 6 rows that are present in the hourly data. They are from the
 last day of the data range.
 
-### Hear rate data cleaning
+### Heart rate data cleaning
 
 No duplicates
 
@@ -821,52 +829,24 @@ the number per day, and even in the time resolution.
 
 ![](1_Data_Cleaning_and_manipulation_files/figure-gfm/hear%20rate%20hour-1.png)<!-- -->
 
-The heart rate data can be useful to explore the usage and excercise
-habits for a subset of users. \## Plotting a few explorations
-
-What’s the relationship between steps taken in a day and sedentary
-minutes? How could this help inform the customer segments that we can
-market to? E.g. position this more as a way to get started in walking
-more? Or to measure steps that you’re already taking?
+The heart rate data can be useful to explore the usage and exercise
+habits for a subset of users. I think this data is more useful in
+combination with other information. Therefore, we will aggregate this
+data frame into minute-level by taking the mean within a minute and keep
+it as such.
 
 ``` r
-ggplot(data=dailyActivity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() + theme_bw()
+#Take out the seconds info
+second(heartrate_seconds$Time) <- 0
+
+#Group and Summarise
+heartrate_minutes <- heartrate_seconds %>% group_by(Id, Time) %>% summarise(BPM = mean(Value))
+
+minuteAct_BPM <- inner_join(minuteActivity, heartrate_minutes, by = join_by(Id, ActivityMinute == Time))
+##Join with minute activity, 
+rm(heartrate_seconds)
 ```
 
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
-
-What’s the relationship between minutes asleep and time in bed? You
-might expect it to be almost completely linear - are there any
-unexpected trends?
-
-``` r
-ggplot(data=sleepDay, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point() + theme_bw()
-```
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
-
-![](1_Data_Cleaning_and_manipulation_files/figure-gfm/velocities-1.png)<!-- -->
-
-This is at the same time a sanity check (no one is travelling at 100
-km/h, no sedentary velocity is significantly above 0) and an overview of
-the kind of activities people are doing. A few jog. Most walk (or
-swim?). The zero velocities in all categories apart from sedentary are
-probably people on a treadmill or stationary bike, or lifting weights.
-Lower than average velocities could be people hiking, swimming or going
-upstairs: intense activities that do not cover much distance.
-
-What could these trends tell you about how to help market this product?
-Or areas where you might want to explore further?
-
-Note that there were more participant Ids in the daily activity dataset
-that have been filtered out using merge. Consider using ‘outer_join’ to
-keep those in the dataset.
-
-Now you can explore some different relationships between activity and
-sleep as well. For example, do you think participants who sleep more
-also take more steps or fewer steps per day? Is there a relationship at
-all? How could these answers help inform the marketing strategy of how
-you position this new product?
-
-This is just one example of how to get started with this data - there
-are many other files and questions to explore as well!
+Joining with the minute activity will lose a lot of the minute level
+data, so it cannot be used for all timespans but it should still be a
+good amount of data.

@@ -387,7 +387,7 @@ setdiff(select(hourlyActivity, Id, ActivityHour),
 
 The aggregated minute data is basically identical to the hour data, except for 6 rows that are present in the hourly data. They are from the last day of the data range.
 
-### Hear rate data cleaning
+### Heart rate data cleaning
 
 No duplicates
 
