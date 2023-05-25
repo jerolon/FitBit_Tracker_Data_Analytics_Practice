@@ -1,4 +1,4 @@
-# FitBit_Tracker_Data_Analytics_Practice
+# FitBit Tracker Data Analytics
 
 ## Busines T**ask**:
 Analyze the fitibit data to identify trends and find patterns that could help drive a marketing strategy
